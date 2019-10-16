@@ -1,6 +1,7 @@
 {
   "name": "maxwell",
   "version": "0.1.0",
+  "homepage": "https://warlock.ai/maxwell",
   "private": true,
   "dependencies": {
     "@types/jest": "24.0.19",
