@@ -34,10 +34,10 @@ const fdCurlX3DA = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: Sca
     const y = this.thread.y!
     const z = this.thread.x!
 
-    const v = y + 1 >= this.constants.gridSize ? y : y + 1
-    const w = z + 1 >= this.constants.gridSize ? z : z + 1
+    const v = y + 1 >= this.constants.gridSize ? 0 : fieldZ[x][y + 1][z]
+    const w = z + 1 >= this.constants.gridSize ? 0 : fieldY[x][y][z + 1]
 
-    return ((fieldZ[x][v][z] - fieldZ[x][y][z]) - (fieldY[x][y][w] - fieldY[x][y][z])) / (this.constants.cellSize as number)
+    return ((v - fieldZ[x][y][z]) - (w - fieldY[x][y][z])) / (this.constants.cellSize as number)
 }, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 
@@ -46,10 +46,10 @@ const fdCurlY3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: Sca
     const y = this.thread.y!
     const z = this.thread.x!
 
-    const u = x + 1 >= this.constants.gridSize ? x : x + 1
-    const w = z + 1 >= this.constants.gridSize ? z : z + 1
+    const u = x + 1 >= this.constants.gridSize ? 0 : fieldZ[x + 1][y][z]
+    const w = z + 1 >= this.constants.gridSize ? 0 : fieldX[x][y][z + 1]
 
-    return ((fieldX[x][y][w] - fieldX[x][y][z]) - (fieldZ[u][y][z] - fieldZ[x][y][z])) / (this.constants.cellSize as number)
+    return ((w - fieldX[x][y][z]) - (u - fieldZ[x][y][z])) / (this.constants.cellSize as number)
 }, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlZ3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D) {
@@ -57,10 +57,10 @@ const fdCurlZ3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: Sca
     const y = this.thread.y!
     const z = this.thread.x!
 
-    const u = x + 1 >= this.constants.gridSize ? x : x + 1
-    const v = y + 1 >= this.constants.gridSize ? y : y + 1
+    const u = x + 1 >= this.constants.gridSize ? 0 : fieldY[x + 1][y][z]
+    const v = y + 1 >= this.constants.gridSize ? 0 : fieldX[x][y + 1][z]
 
-    return ((fieldY[u][y][z] - fieldY[x][y][z]) - (fieldX[x][v][z] - fieldX[x][y][z])) / (this.constants.cellSize as number)
+    return ((u - fieldY[x][y][z]) - (v - fieldX[x][y][z])) / (this.constants.cellSize as number)
 }, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlX3DB = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: ScalarField3D) {
@@ -68,10 +68,10 @@ const fdCurlX3DB = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: Sca
     const y = this.thread.y!
     const z = this.thread.x!
 
-    const v: number = y - 1 < 0 ? y : y - 1
-    const w: number = z - 1 < 0 ? z : z - 1
+    const v: number = y - 1 < 0 ? 0 : fieldZ[x][y - 1][z]
+    const w: number = z - 1 < 0 ? 0 : fieldY[x][y][z - 1]
 
-    return ((fieldZ[x][y][z] - fieldZ[x][v][z]) - (fieldY[x][y][z] - fieldY[x][y][w])) / (this.constants.cellSize as number)
+    return ((fieldZ[x][y][z] - v) - (fieldY[x][y][z] - w)) / (this.constants.cellSize as number)
 }, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlY3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D) {
@@ -79,10 +79,10 @@ const fdCurlY3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: Sca
     const y = this.thread.y!
     const z = this.thread.x!
 
-    const u: number = x - 1 < 0 ? x : x - 1
-    const w: number = z - 1 < 0 ? z : z - 1
+    const u: number = x - 1 < 0 ? 0 : fieldZ[x - 1][y][z]
+    const w: number = z - 1 < 0 ? 0 : fieldX[x][y][z - 1]
 
-    return ((fieldX[x][y][z] - fieldX[x][y][w]) - (fieldZ[x][y][z] - fieldZ[u][y][z])) / (this.constants.cellSize as number)
+    return ((fieldX[x][y][z] - w) - (fieldZ[x][y][z] - u)) / (this.constants.cellSize as number)
 }, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlZ3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D) {
@@ -90,10 +90,10 @@ const fdCurlZ3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: Sca
     const y = this.thread.y!
     const z = this.thread.x!
 
-    const u: number = x - 1 < 0 ? x : x - 1
-    const v: number = y - 1 < 0 ? y : y - 1
+    const u: number = x - 1 < 0 ? 0 : fieldY[x - 1][y][z]
+    const v: number = y - 1 < 0 ? 0 : fieldX[x][y - 1][z]
 
-    return ((fieldY[x][y][z] - fieldY[u][y][z]) - (fieldX[x][y][z] - fieldX[x][v][z])) / (this.constants.cellSize as number)
+    return ((fieldY[x][y][z] - u) - (fieldX[x][y][z] - v)) / (this.constants.cellSize as number)
 }, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 function inplaceMulAddScalarField3D(a: ScalarField3D, b: ScalarField3D, s: number) {
