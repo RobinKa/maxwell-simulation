@@ -1,10 +1,10 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { GPU } from "gpu.js"
 
-const gridSize = 19
-const p = Math.floor(gridSize / 2)
+const gridSize = 30
+const cellSize = 0.1
 
-const energyScale = 1
+const energyScale = 2
 
 type Vector3D = [number, number, number]
 
@@ -37,8 +37,8 @@ const fdCurlX3DA = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: Sca
     const v = y + 1 >= this.constants.gridSize ? y : y + 1
     const w = z + 1 >= this.constants.gridSize ? z : z + 1
 
-    return (fieldZ[x][v][z] - fieldZ[x][y][z]) - (fieldY[x][y][w] - fieldY[x][y][z])
-}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize } })
+    return ((fieldZ[x][v][z] - fieldZ[x][y][z]) - (fieldY[x][y][w] - fieldY[x][y][z])) / (this.constants.cellSize as number)
+}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 
 const fdCurlY3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D) {
@@ -49,8 +49,8 @@ const fdCurlY3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: Sca
     const u = x + 1 >= this.constants.gridSize ? x : x + 1
     const w = z + 1 >= this.constants.gridSize ? z : z + 1
 
-    return (fieldX[x][y][w] - fieldX[x][y][z]) - (fieldZ[u][y][z] - fieldZ[x][y][z])
-}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize } })
+    return ((fieldX[x][y][w] - fieldX[x][y][z]) - (fieldZ[u][y][z] - fieldZ[x][y][z])) / (this.constants.cellSize as number)
+}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlZ3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D) {
     const x = this.thread.z!
@@ -60,9 +60,8 @@ const fdCurlZ3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: Sca
     const u = x + 1 >= this.constants.gridSize ? x : x + 1
     const v = y + 1 >= this.constants.gridSize ? y : y + 1
 
-    return (fieldY[u][y][z] - fieldY[x][y][z]) - (fieldX[x][v][z] - fieldX[x][y][z])
-}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize } })
-
+    return ((fieldY[u][y][z] - fieldY[x][y][z]) - (fieldX[x][v][z] - fieldX[x][y][z])) / (this.constants.cellSize as number)
+}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlX3DB = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: ScalarField3D) {
     const x = this.thread.z!
@@ -72,8 +71,8 @@ const fdCurlX3DB = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: Sca
     const v: number = y - 1 < 0 ? y : y - 1
     const w: number = z - 1 < 0 ? z : z - 1
 
-    return (fieldZ[x][y][z] - fieldZ[x][v][z]) - (fieldY[x][y][z] - fieldY[x][y][w])
-}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize } })
+    return ((fieldZ[x][y][z] - fieldZ[x][v][z]) - (fieldY[x][y][z] - fieldY[x][y][w])) / (this.constants.cellSize as number)
+}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlY3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D) {
     const x = this.thread.z!
@@ -83,8 +82,8 @@ const fdCurlY3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: Sca
     const u: number = x - 1 < 0 ? x : x - 1
     const w: number = z - 1 < 0 ? z : z - 1
 
-    return (fieldX[x][y][z] - fieldX[x][y][w]) - (fieldZ[x][y][z] - fieldZ[u][y][z])
-}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize } })
+    return ((fieldX[x][y][z] - fieldX[x][y][w]) - (fieldZ[x][y][z] - fieldZ[u][y][z])) / (this.constants.cellSize as number)
+}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 const fdCurlZ3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D) {
     const x = this.thread.z!
@@ -94,8 +93,8 @@ const fdCurlZ3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: Sca
     const u: number = x - 1 < 0 ? x : x - 1
     const v: number = y - 1 < 0 ? y : y - 1
 
-    return (fieldY[x][y][z] - fieldY[u][y][z]) - (fieldX[x][y][z] - fieldX[x][v][z])
-}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize } })
+    return ((fieldY[x][y][z] - fieldY[u][y][z]) - (fieldX[x][y][z] - fieldX[x][v][z])) / (this.constants.cellSize as number)
+}, { output: [gridSize, gridSize, gridSize], constants: { gridSize: gridSize, cellSize: cellSize } })
 
 function inplaceMulAddScalarField3D(a: ScalarField3D, b: ScalarField3D, s: number) {
     for (let x = 0; x < a.length; x++) {
@@ -174,33 +173,43 @@ class FDTDSimulator implements Simulator {
 const simulator = new FDTDSimulator([gridSize, gridSize, gridSize])
 
 function drawArrow(ctx: CanvasRenderingContext2D, from: [number, number], to: [number, number], style: string) {
-    const r = 5
-
-    ctx.strokeStyle = style
-    ctx.beginPath()
-    ctx.moveTo(from[0], from[1])
-    ctx.lineTo(to[0], to[1])
-    ctx.stroke()
-
     ctx.fillStyle = style
-    ctx.beginPath()
-    let angle = Math.atan2(to[1] - from[1], to[0] - from[0])
-    let x = r * Math.cos(angle) + to[0]
-    let y = r * Math.sin(angle) + to[1]
-    ctx.moveTo(x, y)
 
-    angle += (1 / 3) * (2 * Math.PI)
-    x = r * Math.cos(angle) + to[0]
-    y = r * Math.sin(angle) + to[1]
-    ctx.lineTo(x, y)
+    const r = 5
+    const dx = from[0] - to[0]
+    const dy = from[1] - to[1]
 
-    angle += (1 / 3) * (2 * Math.PI)
-    x = r * Math.cos(angle) + to[0]
-    y = r * Math.sin(angle) + to[1]
-    ctx.lineTo(x, y)
+    if (dx * dx + dy * dy > 1) {
 
-    ctx.closePath()
-    ctx.fill()
+        ctx.strokeStyle = style
+        ctx.beginPath()
+        ctx.moveTo(from[0], from[1])
+        ctx.lineTo(to[0], to[1])
+        ctx.stroke()
+
+        ctx.beginPath()
+        let angle = Math.atan2(to[1] - from[1], to[0] - from[0])
+        let x = r * Math.cos(angle) + to[0]
+        let y = r * Math.sin(angle) + to[1]
+        ctx.moveTo(x, y)
+
+        angle += (1 / 3) * (2 * Math.PI)
+        x = r * Math.cos(angle) + to[0]
+        y = r * Math.sin(angle) + to[1]
+        ctx.lineTo(x, y)
+
+        angle += (1 / 3) * (2 * Math.PI)
+        x = r * Math.cos(angle) + to[0]
+        y = r * Math.sin(angle) + to[1]
+        ctx.lineTo(x, y)
+
+        ctx.closePath()
+        ctx.fill()
+    } else {
+        ctx.beginPath()
+        ctx.arc(from[0], from[1], r * 2 / 3, 0, 2 * Math.PI)
+        ctx.fill()
+    }
 }
 
 function crossVector3D(a: Vector3D, b: Vector3D): Vector3D {
@@ -231,13 +240,19 @@ function clampMagnitudeVector3D(maxMag: number, v: Vector3D): Vector3D {
     ]
 }
 
+function clamp(min: number, max: number, value: number) {
+    return Math.max(min, Math.min(max, value))
+}
+
 export default function () {
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
     const [showElectric, setShowElectric] = useState(false)
-    const [showMagnetic, setShowMagnetic] = useState(false)
-    const [showPoynting, setShowPoynting] = useState(true)
+    const [showMagnetic, setShowMagnetic] = useState(true)
+    const [showPoynting, setShowPoynting] = useState(false)
     const [showEnergy, setShowEnergy] = useState(true)
+
+    const [mouseDownPos, setMouseDownPos] = useState<[number, number] | null>(null)
 
     const redrawCanvas = useMemo(() => (simulationData: SimulationData) => {
         if (canvasRef.current) {
@@ -256,7 +271,7 @@ export default function () {
                 for (let x = 0; x < simulationData.electricFieldX.length; x++) {
                     for (let y = 0; y < simulationData.electricFieldX[0].length; y++) {
                         //for (let z = 0; z < 1; z++) {
-                        const z = p; {
+                        const z = Math.round(simulationData.electricFieldX[0][0].length / 2); {
                             const canvasCoords: [number, number] = [
                                 (x + 0.5) * cellSize + cellSize * z / (4 * simulationData.electricFieldX.length),
                                 (y + 0.5) * cellSize - cellSize * z / (4 * simulationData.electricFieldX.length)
@@ -280,7 +295,7 @@ export default function () {
                             if (showEnergy) {
                                 ctx.strokeStyle = `rgb(${depthColor}, 255, ${depthColor})`
                                 ctx.beginPath()
-                                ctx.arc(canvasCoords[0], canvasCoords[1], arrowLength * Math.min(1, Math.sqrt(energy / energyScale)), 0, 2 * Math.PI)
+                                ctx.arc(canvasCoords[0], canvasCoords[1], arrowLength * Math.min(1, (energy / energyScale)), 0, 2 * Math.PI)
                                 ctx.stroke()
                             }
 
@@ -334,13 +349,7 @@ export default function () {
 
     const getSignal = useMemo(() => {
         return (t: number) => {
-            const el: Vector3D = [0, 0, t > 2 ? 0 : 20]
-            const mag: Vector3D = [0, t > 5 ? 0 : 0, 0]
-
-            return {
-                electric: el,
-                magnetic: mag
-            }
+            return [0, 0, 3]
         }
     }, [])
 
@@ -353,37 +362,45 @@ export default function () {
 
                 const dt = 0.01
 
-                let sig = getSignal(simData.time)
-                for (let z = 0; z < gridSize; z++) {
-                    simData.electricFieldX[p][p][z] = sig.electric[0]
-                    simData.electricFieldY[p][p][z] = sig.electric[1]
-                    simData.electricFieldZ[p][p][z] = sig.electric[2]
-                    simData.magneticFieldX[p][p][z] = sig.magnetic[0]
-                    simData.magneticFieldY[p][p][z] = sig.magnetic[1]
-                    simData.magneticFieldZ[p][p][z] = sig.magnetic[2]
+                if (mouseDownPos !== null && canvasRef.current) {
+                    let sig = getSignal(simData.time)
+
+                    const px = clamp(0, simData.electricFieldX.length - 1, Math.round(simData.electricFieldX.length * mouseDownPos[0] / canvasRef.current.width))
+                    const py = clamp(0, simData.electricFieldX[0].length - 1, Math.round(simData.electricFieldX[0].length * mouseDownPos[1] / canvasRef.current.height))
+
+                    for (let z = 0; z < gridSize; z++) {
+                        simData.electricFieldX[px][py][z] = sig[0]
+                        simData.electricFieldY[px][py][z] = sig[1]
+                        simData.electricFieldZ[px][py][z] = sig[2]
+                    }
                 }
+
                 simulator.stepMagnetic(dt)
 
-                sig = getSignal(simData.time)
-                for (let z = 0; z < gridSize; z++) {
-                    simData.electricFieldX[p][p][z] = sig.electric[0]
-                    simData.electricFieldY[p][p][z] = sig.electric[1]
-                    simData.electricFieldZ[p][p][z] = sig.electric[2]
-                    simData.magneticFieldX[p][p][z] = sig.magnetic[0]
-                    simData.magneticFieldY[p][p][z] = sig.magnetic[1]
-                    simData.magneticFieldZ[p][p][z] = sig.magnetic[2]
+                if (mouseDownPos !== null && canvasRef.current) {
+                    let sig = getSignal(simData.time)
+
+                    const px = clamp(0, simData.electricFieldX.length - 1, Math.round(simData.electricFieldX.length * mouseDownPos[0] / canvasRef.current.width))
+                    const py = clamp(0, simData.electricFieldX[0].length - 1, Math.round(simData.electricFieldX[0].length * mouseDownPos[1] / canvasRef.current.height))
+
+                    for (let z = 0; z < gridSize; z++) {
+                        simData.electricFieldX[px][py][z] = sig[0]
+                        simData.electricFieldY[px][py][z] = sig[1]
+                        simData.electricFieldZ[px][py][z] = sig[2]
+                    }
                 }
+
                 simulator.stepElectric(dt)
 
                 redrawCanvas(simulator.getData())
-                await new Promise(resolve => setTimeout(resolve, dt * 1000))
+                await new Promise(resolve => setTimeout(resolve, 1000 * dt))
             }
         })
 
         loop()
 
         return () => { stop = true }
-    }, [redrawCanvas, getSignal])
+    }, [redrawCanvas, getSignal, mouseDownPos, canvasRef])
 
     useEffect(() => {
         redrawCanvas(simulator.getData())
@@ -394,7 +411,11 @@ export default function () {
     return (
         <div>
             <div style={{ float: "left" }}>
-                <canvas width={window.innerHeight} height={window.innerHeight} ref={canvasRef} />
+                <canvas width={window.innerHeight} height={window.innerHeight} ref={canvasRef}
+                    onMouseDown={e => setMouseDownPos([e.clientX, e.clientY])}
+                    onMouseMove={e => { if (mouseDownPos !== null) setMouseDownPos([e.clientX, e.clientY]) }}
+                    onMouseUp={_ => setMouseDownPos(null)}
+                />
             </div>
             <div>
                 <div><button onClick={() => setShowElectric(!showElectric)}>Toggle electric</button></div>
