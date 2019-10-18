@@ -4,21 +4,21 @@ import { ScalarField3D, FDTDSimulator } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
 
-const dt = 0.01
-const gridSize: [number, number, number] = [100, Math.ceil(200 / canvasSize[0] * canvasSize[1]), 10]
-const cellSize = 0.05
+const dt = 0.005
+const gridSizeX = 120
+const gridSize: [number, number, number] = [gridSizeX, Math.ceil(gridSizeX / canvasSize[0] * canvasSize[1]), 1]
+const cellSize = 0.01
 
 const simulator = new FDTDSimulator(gridSize, cellSize)
-
 
 const makeRenderSimulatorCanvas = (g: GPU) =>
     g.createKernel(function (electricFieldX: ScalarField3D, electricFieldY: ScalarField3D, electricFieldZ: ScalarField3D, magneticFieldX: ScalarField3D, magneticFieldY: ScalarField3D, magneticFieldZ: ScalarField3D) {
         const x = (this.constants.gridSizeX as number) * this.thread.x! / (this.output.x as number)
         const y = (this.constants.gridSizeY as number) * this.thread.y! / (this.output.y as number)
-        const xb = Math.ceil(x)
-        const yb = Math.ceil(y)
         const xa = Math.floor(x)
         const ya = Math.floor(y)
+        const xb = xa + 1
+        const yb = ya + 1
 
         const alphaX = xb === xa ? 0 : (x - xa) / (xb - xa)
         const alphaY = yb === ya ? 0 : (y - ya) / (yb - ya)
@@ -30,21 +30,35 @@ const makeRenderSimulatorCanvas = (g: GPU) =>
         const eBA = electricFieldX[xb][ya][z] * electricFieldX[xb][ya][z] + electricFieldY[xb][ya][z] * electricFieldY[xb][ya][z] + electricFieldZ[xb][ya][z] * electricFieldZ[xb][ya][z]
         const eBB = electricFieldX[xb][yb][z] * electricFieldX[xb][yb][z] + electricFieldY[xb][yb][z] * electricFieldY[xb][yb][z] + electricFieldZ[xb][yb][z] * electricFieldZ[xb][yb][z]
 
-        const mAA = magneticFieldX[xa][ya][z] * magneticFieldX[xa][ya][z] + magneticFieldY[xa][ya][z] * magneticFieldY[xa][ya][z] + magneticFieldZ[xa][ya][z] * magneticFieldZ[xa][ya][z]
-        const mAB = magneticFieldX[xa][yb][z] * magneticFieldX[xa][yb][z] + magneticFieldY[xa][yb][z] * magneticFieldY[xa][yb][z] + magneticFieldZ[xa][yb][z] * magneticFieldZ[xa][yb][z]
-        const mBA = magneticFieldX[xb][ya][z] * magneticFieldX[xb][ya][z] + magneticFieldY[xb][ya][z] * magneticFieldY[xb][ya][z] + magneticFieldZ[xb][ya][z] * magneticFieldZ[xb][ya][z]
-        const mBB = magneticFieldX[xb][yb][z] * magneticFieldX[xb][yb][z] + magneticFieldY[xb][yb][z] * magneticFieldY[xb][yb][z] + magneticFieldZ[xb][yb][z] * magneticFieldZ[xb][yb][z]
+        // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
+        const magXAA = (magneticFieldX[xa][ya][z] + magneticFieldX[xa+1][ya+1][z]) / 2
+        const magYAA = (magneticFieldY[xa][ya][z] + magneticFieldY[xa+1][ya+1][z]) / 2
+        const magZAA = (magneticFieldZ[xa][ya][z] + magneticFieldZ[xa+1][ya+1][z]) / 2
+        const magXAB = (magneticFieldX[xa][yb][z] + magneticFieldX[xa+1][yb+1][z]) / 2
+        const magYAB = (magneticFieldY[xa][yb][z] + magneticFieldY[xa+1][yb+1][z]) / 2
+        const magZAB = (magneticFieldZ[xa][yb][z] + magneticFieldZ[xa+1][yb+1][z]) / 2
+        const magXBA = (magneticFieldX[xb][ya][z] + magneticFieldX[xb+1][ya+1][z]) / 2
+        const magYBA = (magneticFieldY[xb][ya][z] + magneticFieldY[xb+1][ya+1][z]) / 2
+        const magZBA = (magneticFieldZ[xb][ya][z] + magneticFieldZ[xb+1][ya+1][z]) / 2
+        const magXBB = (magneticFieldX[xb][yb][z] + magneticFieldX[xb+1][yb+1][z]) / 2
+        const magYBB = (magneticFieldY[xb][yb][z] + magneticFieldY[xb+1][yb+1][z]) / 2
+        const magZBB = (magneticFieldZ[xb][yb][z] + magneticFieldZ[xb+1][yb+1][z]) / 2
+
+        const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
+        const mAB = magXAB * magXAB + magYAB * magYAB + magZAB * magZAB
+        const mBA = magXBA * magXBA + magYBA * magYBA + magZBA * magZBA
+        const mBB = magXBB * magXBB + magYBB * magYBB + magZBB * magZBB
 
         const eMixTop = alphaX * eBA + (1 - alphaX) * eAA
         const eMixBottom = alphaX * eBB + (1 - alphaX) * eAB
-        const eMix = Math.max(0, Math.min(2, alphaY * eMixBottom + (1 - alphaY) * eMixTop))
+        const eMix = Math.max(0, Math.min(25, alphaY * eMixBottom + (1 - alphaY) * eMixTop))
 
         const mMixTop = alphaX * mBA + (1 - alphaX) * mAA
         const mMixBottom = alphaX * mBB + (1 - alphaX) * mAB
-        const mMix = Math.max(0, Math.min(2, alphaY * mMixBottom + (1 - alphaY) * mMixTop))
 
-        //this.color(0, eMix + mMix, 0)
-        this.color(eMix / 2, eMix / 2 * mMix / 2, mMix / 2)
+        const mMix = Math.max(0, Math.min(25, alphaY * mMixBottom + (1 - alphaY) * mMixTop))
+
+        this.color(eMix / 25, 0, mMix / 25)
     }, { output: canvasSize, constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }, graphical: true })
 
 function clamp(min: number, max: number, value: number) {
@@ -60,7 +74,7 @@ export default function () {
 
     const getSignal = useMemo(() => {
         return (t: number) => {
-            return [0, 0, 10 * 60]
+            return [0, 0, 50 * 60]
         }
     }, [])
 
