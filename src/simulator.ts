@@ -1,48 +1,46 @@
 import { GPU, IKernelRunShortcut } from "gpu.js"
 
-export type Field3D<T> = T[][][]
-export type ScalarField3D = Field3D<number>
+export type FlatScalarField3D = {
+    values: number[]
+    shape: [number, number, number]
+}
 
-export function makeField3D<T>(shape: [number, number, number], getValue: (coords: [number, number, number]) => T): Field3D<T> {
+function makeEmptyScalarField3D(shape: [number, number, number]) {
     const field = []
-    for (let x = 0; x < shape[0]; x++) {
-        const row = []
-        for (let y = 0; y < shape[1]; y++) {
-            const d = []
-            for (let z = 0; z < shape[2]; z++) {
-                d.push(getValue([x, y, z]))
-            }
-            row.push(d)
-        }
-        field.push(row)
+    for (let i = 0; i < shape[0] * shape[1] * shape[2]; i++) {
+        field.push(0)
     }
-    return field
+    return { values: field, shape: shape }
+}
+
+export function setScalarField3DValue(field: FlatScalarField3D, x: number, y: number, z: number, value: number) {
+    field.values[x + y * field.shape[0] + z * field.shape[0] * field.shape[1]] = value
+}
+
+export function addScalarField3DValue(field: FlatScalarField3D, x: number, y: number, z: number, value: number) {
+    field.values[x + y * field.shape[0] + z * field.shape[0] * field.shape[1]] += value
+}
+
+export function getScalarField3DValue(field: FlatScalarField3D, x: number, y: number, z: number) {
+    return field.values[x + y * field.shape[0] + z * field.shape[0] * field.shape[1]]
 }
 
 export type SimulationData = {
     time: number
-    electricFieldX: ScalarField3D
-    electricFieldY: ScalarField3D
-    electricFieldZ: ScalarField3D
-    magneticFieldX: ScalarField3D
-    magneticFieldY: ScalarField3D
-    magneticFieldZ: ScalarField3D
-    permittivity: ScalarField3D
-    permeability: ScalarField3D
+    electricFieldX: FlatScalarField3D
+    electricFieldY: FlatScalarField3D
+    electricFieldZ: FlatScalarField3D
+    magneticFieldX: FlatScalarField3D
+    magneticFieldY: FlatScalarField3D
+    magneticFieldZ: FlatScalarField3D
+    permittivity: FlatScalarField3D
+    permeability: FlatScalarField3D
 }
 
 export interface Simulator {
     stepElectric: (dt: number) => void
     stepMagnetic: (dt: number) => void
     getData: () => SimulationData
-}
-
-function reverse<T>(x: T[]) {
-    const y = []
-    for (let i = x.length - 1; i >= 0; i--) {
-        y.push(x[i])
-    }
-    return y
 }
 
 export class FDTDSimulator implements Simulator {
@@ -59,108 +57,194 @@ export class FDTDSimulator implements Simulator {
     constructor(gridSize: [number, number, number], cellSize: number) {
         this.data = {
             time: 0,
-            electricFieldX: makeField3D<number>(gridSize, _ => 0),
-            electricFieldY: makeField3D<number>(gridSize, _ => 0),
-            electricFieldZ: makeField3D<number>(gridSize, _ => 0),
-            magneticFieldX: makeField3D<number>(gridSize, _ => 0),
-            magneticFieldY: makeField3D<number>(gridSize, _ => 0),
-            magneticFieldZ: makeField3D<number>(gridSize, _ => 0),
-            permittivity: makeField3D<number>(gridSize, (_) => 0),
-            permeability: makeField3D<number>(gridSize, (_) => 0),
+            electricFieldX: makeEmptyScalarField3D(gridSize),
+            electricFieldY: makeEmptyScalarField3D(gridSize),
+            electricFieldZ: makeEmptyScalarField3D(gridSize),
+            magneticFieldX: makeEmptyScalarField3D(gridSize),
+            magneticFieldY: makeEmptyScalarField3D(gridSize),
+            magneticFieldZ: makeEmptyScalarField3D(gridSize),
+            permittivity: makeEmptyScalarField3D(gridSize),
+            permeability: makeEmptyScalarField3D(gridSize),
         }
 
-        const reverseGridSize = reverse(gridSize)
+        const cellCount = gridSize[0] * gridSize[1] * gridSize[2]
 
         this.gpu = new GPU()
 
-        this.updateMagneticX = this.gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: ScalarField3D, magFieldX: ScalarField3D, dt: number) {
-            const x = this.thread.z!
-            const y = this.thread.y!
-            const z = this.thread.x!
+        function getAt(field: number[], shapeX: number, shapeY: number, shapeZ: number, x: number, y: number, z: number) {
+            if (x < 0 || x >= shapeX || y < 0 || y >= shapeY || z < 0 || z >= shapeZ) {
+                return 0
+            }
 
-            const v = y + 1 >= this.output.y! ? 0 : fieldZ[x][y + 1][z]
-            //const w = z + 1 >= this.output.x! ? 0 : fieldY[x][y][z + 1]
+            return field[x + y * shapeX + z * shapeX * shapeZ]
+        }
 
-            // d_Y Z - d_Z Y
-            return magFieldX[x][y][z] - dt * ((v - fieldZ[x][y][z]) - (0/*w - fieldY[x][y][z]*/)) / (this.constants.cellSize as number)
-        }, { output: reverseGridSize, constants: { cellSize: cellSize } })
+        function getX(index: number, shapeX: number, shapeY: number, shapeZ: number) {
+            return Math.floor(index % shapeX)
+        }
 
+        function getY(index: number, shapeX: number, shapeY: number, shapeZ: number) {
+            return Math.floor(index / shapeX) % shapeY
+        }
 
-        this.updateMagneticY = this.gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D, magFieldY: ScalarField3D, dt: number) {
-            const x = this.thread.z!
-            const y = this.thread.y!
-            const z = this.thread.x!
+        function getZ(index: number, shapeX: number, shapeY: number, shapeZ: number) {
+            return Math.floor(index / (shapeX * shapeY)) % shapeZ
+        }
 
-            const u = x + 1 >= this.output.z! ? 0 : fieldZ[x + 1][y][z]
-            //const w = z + 1 >= this.output.x! ? 0 : fieldX[x][y][z + 1]
+        this.updateMagneticX = this.gpu.createKernel(function (fieldY: number[], fieldZ: number[], magFieldX: number[], dt: number) {
+            const index = Math.floor(this.thread.x)
 
-            // d_Z X - d_X Z
-            return magFieldY[x][y][z] - dt * ((0/*w - fieldX[x][y][z]*/) - (u - fieldZ[x][y][z])) / (this.constants.cellSize as number)
-        }, { output: reverseGridSize, constants: { cellSize: cellSize } })
+            const gx = this.constants.gridSizeX as number
+            const gy = this.constants.gridSizeY as number
+            const gz = this.constants.gridSizeZ as number
+            const cellSize = this.constants.cellSize as number
 
-        this.updateMagneticZ = this.gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D, magFieldZ: ScalarField3D, dt: number) {
-            const x = this.thread.z!
-            const y = this.thread.y!
-            const z = this.thread.x!
-
-            const u = x + 1 >= this.output.z! ? 0 : fieldY[x + 1][y][z]
-            const v = y + 1 >= this.output.y! ? 0 : fieldX[x][y + 1][z]
-
-            // d_X Y - d_Y X
-            return magFieldZ[x][y][z] - dt * ((u - fieldY[x][y][z]) - (v - fieldX[x][y][z])) / (this.constants.cellSize as number)
-        }, { output: reverseGridSize, constants: { cellSize: cellSize } })
-
-        this.updateElectricX = this.gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: ScalarField3D, elFieldX: ScalarField3D, dt: number) {
-            const x = this.thread.z!
-            const y = this.thread.y!
-            const z = this.thread.x!
-
-            const v = y - 1 < 0 ? 0 : fieldZ[x][y - 1][z]
-            //const w = z - 1 < 0 ? 0 : fieldY[x][y][z - 1]
+            const x = getX(index, gx, gy, gz)
+            const y = getY(index, gx, gy, gz)
+            const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
-            return elFieldX[x][y][z] + dt * ((fieldZ[x][y][z] - v) - (0/*fieldY[x][y][z] - w*/)) / (this.constants.cellSize as number)
-        }, { output: reverseGridSize, constants: { cellSize: cellSize } })
+            return getAt(magFieldX, gx, gy, gz, x, y, z) - (dt / cellSize) * (
+                (getAt(fieldZ, gx, gy, gz, x, y + 1, z) - getAt(fieldZ, gx, gy, gz, x, y, z)))
+        }, {
+            output: [cellCount],
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+        }).setFunctions([getX, getY, getZ, getAt])
 
-        this.updateElectricY = this.gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D, elFieldY: ScalarField3D, dt: number) {
-            const x = this.thread.z!
-            const y = this.thread.y!
-            const z = this.thread.x!
 
-            const u = x - 1 < 0 ? 0 : fieldZ[x - 1][y][z]
-            //const w = z - 1 < 0 ? 0 : fieldX[x][y][z - 1]
+        this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], magFieldY: number[], dt: number) {
+            const index = Math.floor(this.thread.x)
+
+            const gx = this.constants.gridSizeX as number
+            const gy = this.constants.gridSizeY as number
+            const gz = this.constants.gridSizeZ as number
+            const cellSize = this.constants.cellSize as number
+
+            const x = getX(index, gx, gy, gz)
+            const y = getY(index, gx, gy, gz)
+            const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
-            return elFieldY[x][y][z] + dt * ((0/*fieldX[x][y][z] - w*/) - (fieldZ[x][y][z] - u)) / (this.constants.cellSize as number)
-        }, { output: reverseGridSize, constants: { cellSize: cellSize } })
+            return getAt(magFieldY, gx, gy, gz, x, y, z) - (dt / cellSize) * (
+                -(getAt(fieldZ, gx, gy, gz, x + 1, y, z) - getAt(fieldZ, gx, gy, gz, x, y, z)))
+        }, {
+            output: [cellCount],
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+        }).setFunctions([getX, getY, getZ, getAt])
 
-        this.updateElectricZ = this.gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D, elFieldZ: ScalarField3D, dt: number) {
-            const x = this.thread.z!
-            const y = this.thread.y!
-            const z = this.thread.x!
+        this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[], fieldY: number[], magFieldZ: number[], dt: number) {
+            const index = Math.floor(this.thread.x)
 
-            const u = x - 1 < 0 ? 0 : fieldY[x - 1][y][z]
-            const v = y - 1 < 0 ? 0 : fieldX[x][y - 1][z]
+            const gx = this.constants.gridSizeX as number
+            const gy = this.constants.gridSizeY as number
+            const gz = this.constants.gridSizeZ as number
+            const cellSize = this.constants.cellSize as number
+
+            const x = getX(index, gx, gy, gz)
+            const y = getY(index, gx, gy, gz)
+            const z = getZ(index, gx, gy, gz)
 
             // d_X Y - d_Y X
-            return elFieldZ[x][y][z] + dt * ((fieldY[x][y][z] - u) - (fieldX[x][y][z] - v)) / (this.constants.cellSize as number)
-        }, { output: reverseGridSize, constants: { cellSize: cellSize } })
+            return getAt(magFieldZ, gx, gy, gz, x, y, z) - (dt / cellSize) * (
+                (getAt(fieldY, gx, gy, gz, x + 1, y, z) - getAt(fieldY, gx, gy, gz, x, y, z)) -
+                (getAt(fieldX, gx, gy, gz, x, y + 1, z) - getAt(fieldX, gx, gy, gz, x, y, z)))
+        }, {
+            output: [cellCount],
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+        }).setFunctions([getX, getY, getZ, getAt])
+
+        this.updateElectricX = this.gpu.createKernel(function (fieldY: number[], fieldZ: number[], elFieldX: number[], dt: number) {
+            const index = Math.floor(this.thread.x)
+
+            const gx = this.constants.gridSizeX as number
+            const gy = this.constants.gridSizeY as number
+            const gz = this.constants.gridSizeZ as number
+            const cellSize = this.constants.cellSize as number
+
+            const x = getX(index, gx, gy, gz)
+            const y = getY(index, gx, gy, gz)
+            const z = getZ(index, gx, gy, gz)
+
+            // d_Y Z - d_Z Y
+            return getAt(elFieldX, gx, gy, gz, x, y, z) + (dt / cellSize) * (
+                (getAt(fieldZ, gx, gy, gz, x, y, z) - getAt(fieldZ, gx, gy, gz, x, y - 1, z)))
+        }, {
+            output: [cellCount],
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+        }).setFunctions([getX, getY, getZ, getAt])
+
+        this.updateElectricY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], elFieldY: number[], dt: number) {
+            const index = Math.floor(this.thread.x)
+
+            const gx = this.constants.gridSizeX as number
+            const gy = this.constants.gridSizeY as number
+            const gz = this.constants.gridSizeZ as number
+            const cellSize = this.constants.cellSize as number
+
+            const x = getX(index, gx, gy, gz)
+            const y = getY(index, gx, gy, gz)
+            const z = getZ(index, gx, gy, gz)
+
+            // d_Z X - d_X Z
+            return getAt(elFieldY, gx, gy, gz, x, y, z) + (dt / cellSize) * (
+                -(getAt(fieldZ, gx, gy, gz, x, y, z) - getAt(fieldZ, gx, gy, gz, x - 1, y, z)))
+        }, {
+            output: [cellCount],
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+        }).setFunctions([getX, getY, getZ, getAt])
+
+        this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[], fieldY: number[], elFieldZ: number[], dt: number) {
+            const index = Math.floor(this.thread.x)
+
+            const gx = this.constants.gridSizeX as number
+            const gy = this.constants.gridSizeY as number
+            const gz = this.constants.gridSizeZ as number
+            const cellSize = this.constants.cellSize as number
+
+            const x = getX(index, gx, gy, gz)
+            const y = getY(index, gx, gy, gz)
+            const z = getZ(index, gx, gy, gz)
+
+            // d_X Y - d_Y X
+            return getAt(elFieldZ, gx, gy, gz, x, y, z) + (dt / cellSize) * (
+                (getAt(fieldY, gx, gy, gz, x, y, z) - getAt(fieldY, gx, gy, gz, x - 1, y, z)) -
+                (getAt(fieldX, gx, gy, gz, x, y, z) - getAt(fieldX, gx, gy, gz, x, y - 1, z)))
+        }, {
+            output: [cellCount],
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+        }).setFunctions([getX, getY, getZ, getAt])
     }
 
     stepElectric = (dt: number) => {
+        const elX = this.data.electricFieldX.values
+        const elY = this.data.electricFieldY.values
+        const elZ = this.data.electricFieldZ.values
+        const magX = this.data.magneticFieldX.values
+        const magY = this.data.magneticFieldY.values
+        const magZ = this.data.magneticFieldZ.values
+
         // d/dt E(x, t) = (curl B(x, t))/(µε)
-        this.data.electricFieldX = this.updateElectricX(this.data.magneticFieldY, this.data.magneticFieldZ, this.data.electricFieldX, dt) as ScalarField3D
-        this.data.electricFieldY = this.updateElectricY(this.data.magneticFieldX, this.data.magneticFieldZ, this.data.electricFieldY, dt) as ScalarField3D
-        this.data.electricFieldZ = this.updateElectricZ(this.data.magneticFieldX, this.data.magneticFieldY, this.data.electricFieldZ, dt) as ScalarField3D
+        this.data.electricFieldX.values = this.updateElectricX(magY, magZ, elX, dt) as number[]
+        this.data.electricFieldY.values = this.updateElectricY(magX, magZ, elY, dt) as number[]
+        this.data.electricFieldZ.values = this.updateElectricZ(magX, magY, elZ, dt) as number[]
 
         this.data.time += dt / 2
     }
 
     stepMagnetic = (dt: number) => {
+        const elX = this.data.electricFieldX.values
+        const elY = this.data.electricFieldY.values
+        const elZ = this.data.electricFieldZ.values
+        const magX = this.data.magneticFieldX.values
+        const magY = this.data.magneticFieldY.values
+        const magZ = this.data.magneticFieldZ.values
+
+        console.log((this.updateMagneticX(elY, elZ, magX, dt) as number[])[100])
+
         // d/dt B(x, t) = -curl E(x, t)
-        this.data.magneticFieldX = this.updateMagneticX(this.data.electricFieldY, this.data.electricFieldZ, this.data.magneticFieldX, dt) as ScalarField3D
-        this.data.magneticFieldY = this.updateMagneticY(this.data.electricFieldX, this.data.electricFieldZ, this.data.magneticFieldY, dt) as ScalarField3D
-        this.data.magneticFieldZ = this.updateMagneticZ(this.data.electricFieldX, this.data.electricFieldY, this.data.magneticFieldZ, dt) as ScalarField3D
+        this.data.magneticFieldX.values = this.updateMagneticX(elY, elZ, magX, dt) as number[]
+        this.data.magneticFieldY.values = this.updateMagneticY(elX, elZ, magY, dt) as number[]
+        this.data.magneticFieldZ.values = this.updateMagneticZ(elX, elY, magZ, dt) as number[]
 
         this.data.time += dt / 2
     }
