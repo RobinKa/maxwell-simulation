@@ -5,7 +5,7 @@ import { FDTDSimulator, addScalarField3DValue } from "./simulator"
 const canvasSize = [window.innerWidth, window.innerHeight]
 
 const dt = 0.01
-const gridSizeX = 400
+const gridSizeX = 300
 const gridSize: [number, number, number] = [gridSizeX, Math.ceil(gridSizeX / canvasSize[0] * canvasSize[1]), 1]
 const cellSize = 0.05
 
@@ -27,7 +27,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
 
         const ox = this.output.x as number
         const oy = this.output.y as number
-        
+
         const x = gx * this.thread.x! / ox
         const y = gy * (1 - this.thread.y! / oy)
         const xa = Math.floor(x)
@@ -46,18 +46,18 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const eBB = getAt(electricFieldX, gx, gy, gz, xb, yb, z) * getAt(electricFieldX, gx, gy, gz, xb, yb, z) + getAt(electricFieldY, gx, gy, gz, xb, yb, z) * getAt(electricFieldY, gx, gy, gz, xb, yb, z) + getAt(electricFieldZ, gx, gy, gz, xb, yb, z) * getAt(electricFieldZ, gx, gy, gz, xb, yb, z)
 
         // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
-        const magXAA = (getAt(magneticFieldX, gx, gy, gz, xa, ya, z) + getAt(magneticFieldX, gx, gy, gz, xa+1, ya+1, z)) / 2
-        const magYAA = (getAt(magneticFieldY, gx, gy, gz, xa, ya, z) + getAt(magneticFieldY, gx, gy, gz, xa+1, ya+1, z)) / 2
-        const magZAA = (getAt(magneticFieldZ, gx, gy, gz, xa, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xa+1, ya+1, z)) / 2
-        const magXAB = (getAt(magneticFieldX, gx, gy, gz, xa, yb, z) + getAt(magneticFieldX, gx, gy, gz, xa+1, yb+1, z)) / 2
-        const magYAB = (getAt(magneticFieldY, gx, gy, gz, xa, yb, z) + getAt(magneticFieldY, gx, gy, gz, xa+1, yb+1, z)) / 2
-        const magZAB = (getAt(magneticFieldZ, gx, gy, gz, xa, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xa+1, yb+1, z)) / 2
-        const magXBA = (getAt(magneticFieldX, gx, gy, gz, xb, ya, z) + getAt(magneticFieldX, gx, gy, gz, xb+1, ya+1, z)) / 2
-        const magYBA = (getAt(magneticFieldY, gx, gy, gz, xb, ya, z) + getAt(magneticFieldY, gx, gy, gz, xb+1, ya+1, z)) / 2
-        const magZBA = (getAt(magneticFieldZ, gx, gy, gz, xb, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xb+1, ya+1, z)) / 2
-        const magXBB = (getAt(magneticFieldX, gx, gy, gz, xb, yb, z) + getAt(magneticFieldX, gx, gy, gz, xb+1, yb+1, z)) / 2
-        const magYBB = (getAt(magneticFieldY, gx, gy, gz, xb, yb, z) + getAt(magneticFieldY, gx, gy, gz, xb+1, yb+1, z)) / 2
-        const magZBB = (getAt(magneticFieldZ, gx, gy, gz, xb, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xb+1, yb+1, z)) / 2
+        const magXAA = (getAt(magneticFieldX, gx, gy, gz, xa, ya, z) + getAt(magneticFieldX, gx, gy, gz, xa + 1, ya + 1, z)) / 2
+        const magYAA = (getAt(magneticFieldY, gx, gy, gz, xa, ya, z) + getAt(magneticFieldY, gx, gy, gz, xa + 1, ya + 1, z)) / 2
+        const magZAA = (getAt(magneticFieldZ, gx, gy, gz, xa, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xa + 1, ya + 1, z)) / 2
+        const magXAB = (getAt(magneticFieldX, gx, gy, gz, xa, yb, z) + getAt(magneticFieldX, gx, gy, gz, xa + 1, yb + 1, z)) / 2
+        const magYAB = (getAt(magneticFieldY, gx, gy, gz, xa, yb, z) + getAt(magneticFieldY, gx, gy, gz, xa + 1, yb + 1, z)) / 2
+        const magZAB = (getAt(magneticFieldZ, gx, gy, gz, xa, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xa + 1, yb + 1, z)) / 2
+        const magXBA = (getAt(magneticFieldX, gx, gy, gz, xb, ya, z) + getAt(magneticFieldX, gx, gy, gz, xb + 1, ya + 1, z)) / 2
+        const magYBA = (getAt(magneticFieldY, gx, gy, gz, xb, ya, z) + getAt(magneticFieldY, gx, gy, gz, xb + 1, ya + 1, z)) / 2
+        const magZBA = (getAt(magneticFieldZ, gx, gy, gz, xb, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xb + 1, ya + 1, z)) / 2
+        const magXBB = (getAt(magneticFieldX, gx, gy, gz, xb, yb, z) + getAt(magneticFieldX, gx, gy, gz, xb + 1, yb + 1, z)) / 2
+        const magYBB = (getAt(magneticFieldY, gx, gy, gz, xb, yb, z) + getAt(magneticFieldY, gx, gy, gz, xb + 1, yb + 1, z)) / 2
+        const magZBB = (getAt(magneticFieldZ, gx, gy, gz, xb, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xb + 1, yb + 1, z)) / 2
 
         const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
         const mAB = magXAB * magXAB + magYAB * magYAB + magZAB * magZAB
@@ -82,7 +82,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
     }, {
         output: [canvasSize[0], canvasSize[1]],
         constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
-        graphical: true 
+        graphical: true
     }).setFunctions([getAt])
 }
 
@@ -103,43 +103,55 @@ export default function () {
         }
     }, [])
 
-    const step = useCallback(() => {
+    const startLoop = useCallback(() => {
         let stop = false
 
         const loop = (async () => {
-            //await new Promise(resolve => setTimeout(resolve, 100))
+            let simReady = false
+            const resolveSimPromise = (resolve: any) => setTimeout(() => { simReady = true; resolve() }, 1000 * dt)
+            const resolveDrawPromise = (resolve: any) => requestAnimationFrame(resolve)
+
+            let simPromise = new Promise(resolveSimPromise)
+            let drawPromise = new Promise(resolveDrawPromise)
 
             while (!stop) {
+                await Promise.race([simPromise, drawPromise])
+
                 const simData = simulator.getData()
 
-                console.log("iter")
+                if (simReady || simulator.getData().time <= 0) {
+                    if (mouseDownPos !== null && drawCanvasRef.current) {
+                        const sig = getSignal(simData.time)
 
-                if (mouseDownPos !== null && drawCanvasRef.current) {
-                    const sig = getSignal(simData.time)
+                        const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * mouseDownPos[0] / drawCanvasRef.current.width))
+                        const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * mouseDownPos[1] / drawCanvasRef.current.height))
 
-                    const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * mouseDownPos[0] / drawCanvasRef.current.width))
-                    const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * mouseDownPos[1] / drawCanvasRef.current.height))
-
-                    for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                        addScalarField3DValue(simData.electricFieldX, px, py, z, sig[0] * dt / 2)
-                        addScalarField3DValue(simData.electricFieldY, px, py, z, sig[1] * dt / 2)
-                        addScalarField3DValue(simData.electricFieldZ, px, py, z, sig[2] * dt / 2)
+                        for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
+                            addScalarField3DValue(simData.electricFieldX, px, py, z, sig[0] * dt / 2)
+                            addScalarField3DValue(simData.electricFieldY, px, py, z, sig[1] * dt / 2)
+                            addScalarField3DValue(simData.electricFieldZ, px, py, z, sig[2] * dt / 2)
+                        }
                     }
+
+                    simulator.stepMagnetic(dt)
+                    simulator.stepElectric(dt)
+
+                    simPromise = new Promise(resolveSimPromise)
+                } else {
+                    if (renderSim === null && drawCanvasRef.current !== null) {
+                        renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
+                    }
+    
+                    if (renderSim !== null) {
+                        renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
+                            simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values)
+                    }
+    
+                    drawPromise = new Promise(resolveDrawPromise)
                 }
 
-                simulator.stepMagnetic(dt)
-                simulator.stepElectric(dt)
-
-                if (renderSim === null && drawCanvasRef.current !== null) {
-                    renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
-                }
-
-                if (renderSim !== null) {
-                    renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
-                        simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values)
-                }
-
-                await new Promise(resolve => setTimeout(resolve, 1))
+                simReady = false
+                await Promise.race([simPromise, drawPromise])
             }
         })
 
@@ -148,7 +160,7 @@ export default function () {
         return () => { stop = true }
     }, [getSignal, mouseDownPos])
 
-    useEffect(step, [step])
+    useEffect(startLoop, [startLoop])
 
     return (
         <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef}

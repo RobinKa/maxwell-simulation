@@ -79,11 +79,11 @@ export class FDTDSimulator implements Simulator {
             return field[x + y * shapeX + z * shapeX * shapeZ]
         }
 
-        function getX(index: number, shapeX: number, shapeY: number, shapeZ: number) {
-            return Math.floor(index % shapeX)
+        function getX(index: number, shapeX: number) {
+            return index % shapeX
         }
 
-        function getY(index: number, shapeX: number, shapeY: number, shapeZ: number) {
+        function getY(index: number, shapeX: number, shapeY: number) {
             return Math.floor(index / shapeX) % shapeY
         }
 
@@ -99,8 +99,8 @@ export class FDTDSimulator implements Simulator {
             const gz = this.constants.gridSizeZ as number
             const cellSize = this.constants.cellSize as number
 
-            const x = getX(index, gx, gy, gz)
-            const y = getY(index, gx, gy, gz)
+            const x = getX(index, gx)
+            const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
@@ -120,8 +120,8 @@ export class FDTDSimulator implements Simulator {
             const gz = this.constants.gridSizeZ as number
             const cellSize = this.constants.cellSize as number
 
-            const x = getX(index, gx, gy, gz)
-            const y = getY(index, gx, gy, gz)
+            const x = getX(index, gx)
+            const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
@@ -140,8 +140,8 @@ export class FDTDSimulator implements Simulator {
             const gz = this.constants.gridSizeZ as number
             const cellSize = this.constants.cellSize as number
 
-            const x = getX(index, gx, gy, gz)
-            const y = getY(index, gx, gy, gz)
+            const x = getX(index, gx)
+            const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_X Y - d_Y X
@@ -161,8 +161,8 @@ export class FDTDSimulator implements Simulator {
             const gz = this.constants.gridSizeZ as number
             const cellSize = this.constants.cellSize as number
 
-            const x = getX(index, gx, gy, gz)
-            const y = getY(index, gx, gy, gz)
+            const x = getX(index, gx)
+            const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
@@ -181,8 +181,8 @@ export class FDTDSimulator implements Simulator {
             const gz = this.constants.gridSizeZ as number
             const cellSize = this.constants.cellSize as number
 
-            const x = getX(index, gx, gy, gz)
-            const y = getY(index, gx, gy, gz)
+            const x = getX(index, gx)
+            const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
@@ -201,8 +201,8 @@ export class FDTDSimulator implements Simulator {
             const gz = this.constants.gridSizeZ as number
             const cellSize = this.constants.cellSize as number
 
-            const x = getX(index, gx, gy, gz)
-            const y = getY(index, gx, gy, gz)
+            const x = getX(index, gx)
+            const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_X Y - d_Y X
@@ -238,8 +238,6 @@ export class FDTDSimulator implements Simulator {
         const magX = this.data.magneticFieldX.values
         const magY = this.data.magneticFieldY.values
         const magZ = this.data.magneticFieldZ.values
-
-        console.log((this.updateMagneticX(elY, elZ, magX, dt) as number[])[100])
 
         // d/dt B(x, t) = -curl E(x, t)
         this.data.magneticFieldX.values = this.updateMagneticX(elY, elZ, magX, dt) as number[]
