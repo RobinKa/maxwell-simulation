@@ -1,169 +1,27 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { GPU } from "gpu.js"
-
-const gridSize: [number, number, number] = [50, 50, 50]
-const cellSize = 0.025
-const dt = 0.001
-
-type Field3D<T> = T[][][]
-type ScalarField3D = Field3D<number>
-
-function makeField3D<T>(shape: [number, number, number], getValue: (coords: [number, number, number]) => T): Field3D<T> {
-    const field = []
-    for (let x = 0; x < shape[0]; x++) {
-        const row = []
-        for (let y = 0; y < shape[1]; y++) {
-            const d = []
-            for (let z = 0; z < shape[2]; z++) {
-                d.push(getValue([x, y, z]))
-            }
-            row.push(d)
-        }
-        field.push(row)
-    }
-    return field
-}
-
-const gpu = new GPU({ mode: "gpu" })
-
-const fdCurlX3DA = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: ScalarField3D, magFieldX: ScalarField3D, dt: number) {
-    const x = this.thread.z!
-    const y = this.thread.y!
-    const z = this.thread.x!
-
-    const v = y + 1 >= this.output.y! ? 0 : fieldZ[x][y + 1][z]
-    const w = z + 1 >= this.output.x! ? 0 : fieldY[x][y][z + 1]
-
-    return magFieldX[x][y][z] - dt * ((v - fieldZ[x][y][z]) - (w - fieldY[x][y][z])) / (this.constants.cellSize as number)
-}, { output: gridSize, constants: { cellSize: cellSize } })
-
-
-const fdCurlY3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D, magFieldY: ScalarField3D, dt: number) {
-    const x = this.thread.z!
-    const y = this.thread.y!
-    const z = this.thread.x!
-
-    const u = x + 1 >= this.output.z! ? 0 : fieldZ[x + 1][y][z]
-    const w = z + 1 >= this.output.x! ? 0 : fieldX[x][y][z + 1]
-
-    return magFieldY[x][y][z] - dt * ((w - fieldX[x][y][z]) - (u - fieldZ[x][y][z])) / (this.constants.cellSize as number)
-}, { output: gridSize, constants: { cellSize: cellSize } })
-
-const fdCurlZ3DA = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D, magFieldZ: ScalarField3D, dt: number) {
-    const x = this.thread.z!
-    const y = this.thread.y!
-    const z = this.thread.x!
-
-    const u = x + 1 >= this.output.z! ? 0 : fieldY[x + 1][y][z]
-    const v = y + 1 >= this.output.y! ? 0 : fieldX[x][y + 1][z]
-
-    return magFieldZ[x][y][z] - dt * ((u - fieldY[x][y][z]) - (v - fieldX[x][y][z])) / (this.constants.cellSize as number)
-}, { output: gridSize, constants: { cellSize: cellSize } })
-
-const fdCurlX3DB = gpu.createKernel(function (fieldY: ScalarField3D, fieldZ: ScalarField3D, elFieldX: ScalarField3D, dt: number) {
-    const x = this.thread.z!
-    const y = this.thread.y!
-    const z = this.thread.x!
-
-    const v: number = y - 1 < 0 ? 0 : fieldZ[x][y - 1][z]
-    const w: number = z - 1 < 0 ? 0 : fieldY[x][y][z - 1]
-
-    return elFieldX[x][y][z] + dt * ((fieldZ[x][y][z] - v) - (fieldY[x][y][z] - w)) / (this.constants.cellSize as number)
-}, { output: gridSize, constants: { cellSize: cellSize } })
-
-const fdCurlY3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldZ: ScalarField3D, elFieldY: ScalarField3D, dt: number) {
-    const x = this.thread.z!
-    const y = this.thread.y!
-    const z = this.thread.x!
-
-    const u: number = x - 1 < 0 ? 0 : fieldZ[x - 1][y][z]
-    const w: number = z - 1 < 0 ? 0 : fieldX[x][y][z - 1]
-
-    return elFieldY[x][y][z] + dt * ((fieldX[x][y][z] - w) - (fieldZ[x][y][z] - u)) / (this.constants.cellSize as number)
-}, { output: gridSize, constants: { cellSize: cellSize } })
-
-const fdCurlZ3DB = gpu.createKernel(function (fieldX: ScalarField3D, fieldY: ScalarField3D, elFieldZ: ScalarField3D, dt: number) {
-    const x = this.thread.z!
-    const y = this.thread.y!
-    const z = this.thread.x!
-
-    const u: number = x - 1 < 0 ? 0 : fieldY[x - 1][y][z]
-    const v: number = y - 1 < 0 ? 0 : fieldX[x][y - 1][z]
-
-    return elFieldZ[x][y][z] + dt * ((fieldY[x][y][z] - u) - (fieldX[x][y][z] - v)) / (this.constants.cellSize as number)
-}, { output: gridSize, constants: { cellSize: cellSize } })
-
-type SimulationData = {
-    time: number
-    electricFieldX: ScalarField3D
-    electricFieldY: ScalarField3D
-    electricFieldZ: ScalarField3D
-    magneticFieldX: ScalarField3D
-    magneticFieldY: ScalarField3D
-    magneticFieldZ: ScalarField3D
-    permittivity: ScalarField3D
-    permeability: ScalarField3D
-}
-
-interface Simulator {
-    stepElectric: (dt: number) => void
-    stepMagnetic: (dt: number) => void
-    getData: () => SimulationData
-}
-
-class FDTDSimulator implements Simulator {
-    private data: SimulationData
-
-    constructor(shape: [number, number, number]) {
-        this.data = {
-            time: 0,
-            electricFieldX: makeField3D<number>(shape, _ => 0),
-            electricFieldY: makeField3D<number>(shape, _ => 0),
-            electricFieldZ: makeField3D<number>(shape, _ => 0),
-            magneticFieldX: makeField3D<number>(shape, _ => 0),
-            magneticFieldY: makeField3D<number>(shape, _ => 0),
-            magneticFieldZ: makeField3D<number>(shape, _ => 0),
-            permittivity: makeField3D<number>(shape, (_) => 0),
-            permeability: makeField3D<number>(shape, (_) => 0),
-        }
-    }
-
-    stepElectric = (dt: number) => {
-        // d/dt E(x, t) = (curl B(x, t))/(µε)
-        this.data.electricFieldX = fdCurlX3DB(this.data.magneticFieldY, this.data.magneticFieldZ, this.data.electricFieldX, dt) as ScalarField3D
-        this.data.electricFieldY = fdCurlY3DB(this.data.magneticFieldX, this.data.magneticFieldZ, this.data.electricFieldY, dt) as ScalarField3D
-        this.data.electricFieldZ = fdCurlZ3DB(this.data.magneticFieldX, this.data.magneticFieldY, this.data.electricFieldZ, dt) as ScalarField3D
-
-        this.data.time += dt / 2
-    }
-
-    stepMagnetic = (dt: number) => {
-        // d/dt B(x, t) = -curl E(x, t)
-        this.data.magneticFieldX = fdCurlX3DA(this.data.electricFieldY, this.data.electricFieldZ, this.data.magneticFieldX, dt) as ScalarField3D
-        this.data.magneticFieldY = fdCurlY3DA(this.data.electricFieldX, this.data.electricFieldZ, this.data.magneticFieldY, dt) as ScalarField3D
-        this.data.magneticFieldZ = fdCurlZ3DA(this.data.electricFieldX, this.data.electricFieldY, this.data.magneticFieldZ, dt) as ScalarField3D
-
-        this.data.time += dt / 2
-    }
-
-    getData = () => this.data
-}
-
-const simulator = new FDTDSimulator(gridSize)
+import { ScalarField3D, FDTDSimulator } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
+
+const dt = 0.01
+const gridSize: [number, number, number] = [100, Math.ceil(200 / canvasSize[0] * canvasSize[1]), 10]
+const cellSize = 0.05
+
+const simulator = new FDTDSimulator(gridSize, cellSize)
+
 
 const makeRenderSimulatorCanvas = (g: GPU) =>
     g.createKernel(function (electricFieldX: ScalarField3D, electricFieldY: ScalarField3D, electricFieldZ: ScalarField3D, magneticFieldX: ScalarField3D, magneticFieldY: ScalarField3D, magneticFieldZ: ScalarField3D) {
         const x = (this.constants.gridSizeX as number) * this.thread.x! / (this.output.x as number)
-        const y = (this.constants.gridSizeY as number) * -this.thread.y! / (this.output.y as number)
+        const y = (this.constants.gridSizeY as number) * this.thread.y! / (this.output.y as number)
         const xb = Math.ceil(x)
         const yb = Math.ceil(y)
-        const xa = xb - 1
-        const ya = yb - 1
+        const xa = Math.floor(x)
+        const ya = Math.floor(y)
 
-        const alphaX = (x - xa) / (xb - xa)
-        const alphaY = (y - ya) / (yb - ya)
+        const alphaX = xb === xa ? 0 : (x - xa) / (xb - xa)
+        const alphaY = yb === ya ? 0 : (y - ya) / (yb - ya)
 
         const z = Math.round((this.constants.gridSizeZ as number) / 2)
 
@@ -185,6 +43,7 @@ const makeRenderSimulatorCanvas = (g: GPU) =>
         const mMixBottom = alphaX * mBB + (1 - alphaX) * mAB
         const mMix = Math.max(0, Math.min(2, alphaY * mMixBottom + (1 - alphaY) * mMixTop))
 
+        //this.color(0, eMix + mMix, 0)
         this.color(eMix / 2, eMix / 2 * mMix / 2, mMix / 2)
     }, { output: canvasSize, constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }, graphical: true })
 
@@ -213,7 +72,6 @@ export default function () {
 
             while (!stop) {
                 const simData = simulator.getData()
-
 
                 if (mouseDownPos !== null && drawCanvasRef.current) {
                     const sig = getSignal(simData.time)
@@ -267,8 +125,8 @@ export default function () {
 
     return (
         <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef}
-            onMouseDown={e => setMouseDownPos([e.clientX, e.clientY])}
-            onMouseMove={e => { if (mouseDownPos !== null) setMouseDownPos([e.clientX, e.clientY]) }}
+            onMouseDown={e => setMouseDownPos([e.clientX, canvasSize[1] - e.clientY])}
+            onMouseMove={e => { if (mouseDownPos !== null) setMouseDownPos([e.clientX, canvasSize[1] - e.clientY]) }}
             onMouseUp={_ => setMouseDownPos(null)} />
     )
 }
