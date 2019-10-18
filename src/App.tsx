@@ -1,13 +1,13 @@
-import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useRef, useCallback, useEffect } from 'react'
 import { GPU } from "gpu.js"
 import { FDTDSimulator, addScalarField3DValue } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
 
 const dt = 0.01
-const gridSizeX = 300
+const gridSizeX = 400
 const gridSize: [number, number, number] = [gridSizeX, Math.ceil(gridSizeX / canvasSize[0] * canvasSize[1]), 1]
-const cellSize = 0.05
+const cellSize = 0.03
 
 const simulator = new FDTDSimulator(gridSize, cellSize)
 
@@ -64,7 +64,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const mBA = magXBA * magXBA + magYBA * magYBA + magZBA * magZBA
         const mBB = magXBB * magXBB + magYBB * magYBB + magZBB * magZBB
 
-        const scale = 300
+        const scale = 50
 
         const eMixTop = alphaX * eBA + (1 - alphaX) * eAA
         const eMixBottom = alphaX * eBB + (1 - alphaX) * eAB
@@ -75,7 +75,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
 
         const mMix = Math.max(0, Math.min(scale, alphaY * mMixBottom + (1 - alphaY) * mMixTop))
 
-        this.color(Math.sqrt(eMix / scale), Math.sqrt(eMix / scale + mMix / scale), Math.sqrt(mMix / scale))
+        this.color(eMix / scale, 0, mMix / scale)
         //this.color(eAA, 0, 0)
         //this.color(alphaX, alphaY, 0)
         //this.color(getAt(electricFieldZ, gx, gy, gz, xa, ya, z) * getAt(electricFieldZ, gx, gy, gz, xa, ya, z), 0, 0)
@@ -91,17 +91,12 @@ function clamp(min: number, max: number, value: number) {
 }
 
 let renderSim: any = null
+let signalStrength = 0
+let signalPosition = [0, 0]
+let mouseDownPos: [number, number] | null = null
 
 export default function () {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
-
-    const [mouseDownPos, setMouseDownPos] = useState<[number, number] | null>(null)
-
-    const getSignal = useMemo(() => {
-        return (t: number) => {
-            return [0, 0, Math.sin(2 * Math.PI * t) * 500 * 60]
-        }
-    }, [])
 
     const startLoop = useCallback(() => {
         let stop = false
@@ -120,16 +115,21 @@ export default function () {
                 const simData = simulator.getData()
 
                 if (simReady || simulator.getData().time <= 0) {
-                    if (mouseDownPos !== null && drawCanvasRef.current) {
-                        const sig = getSignal(simData.time)
+                    if (mouseDownPos !== null) {
+                        signalPosition = mouseDownPos
+                        signalStrength = Math.min(10000, signalStrength + dt * 10000)
+                    }
 
-                        const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * mouseDownPos[0] / drawCanvasRef.current.width))
-                        const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * mouseDownPos[1] / drawCanvasRef.current.height))
+                    signalStrength *= Math.pow(0.1, dt)
+
+                    if (signalStrength > 1 && drawCanvasRef.current) {
+                        const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition[0] / drawCanvasRef.current.width))
+                        const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
 
                         for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                            addScalarField3DValue(simData.electricFieldX, px, py, z, sig[0] * dt / 2)
-                            addScalarField3DValue(simData.electricFieldY, px, py, z, sig[1] * dt / 2)
-                            addScalarField3DValue(simData.electricFieldZ, px, py, z, sig[2] * dt / 2)
+                            //addScalarField3DValue(simData.electricFieldX, px, py, z, sig[0] * dt / 2)
+                            //addScalarField3DValue(simData.electricFieldY, px, py, z, sig[1] * dt / 2)
+                            addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(2 * 2 * Math.PI * simData.time) * signalStrength * dt)
                         }
                     }
 
@@ -141,12 +141,12 @@ export default function () {
                     if (renderSim === null && drawCanvasRef.current !== null) {
                         renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
                     }
-    
+
                     if (renderSim !== null) {
                         renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
                             simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values)
                     }
-    
+
                     drawPromise = new Promise(resolveDrawPromise)
                 }
 
@@ -158,14 +158,14 @@ export default function () {
         loop()
 
         return () => { stop = true }
-    }, [getSignal, mouseDownPos])
+    }, [])
 
     useEffect(startLoop, [startLoop])
 
     return (
         <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef}
-            onMouseDown={e => setMouseDownPos([e.clientX, e.clientY])}
-            onMouseMove={e => { if (mouseDownPos !== null) setMouseDownPos([e.clientX, e.clientY]) }}
-            onMouseUp={_ => setMouseDownPos(null)} />
+            onMouseDown={e => mouseDownPos = [e.clientX, e.clientY]}
+            onMouseMove={e => { if (mouseDownPos !== null) mouseDownPos = [e.clientX, e.clientY] }}
+            onMouseUp={_ => mouseDownPos = null} />
     )
 }
