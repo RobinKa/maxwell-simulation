@@ -81,7 +81,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         output: [canvasSize[0], canvasSize[1]],
         constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
         graphical: true
-    }).setFunctions([getAt])
+    }).setFunctions([getAt]).setWarnVarUsage(false)
 }
 
 function clamp(min: number, max: number, value: number) {

@@ -117,7 +117,7 @@ export class FDTDSimulator implements Simulator {
         }, {
             output: [cellCount],
             constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt])
+        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
 
 
         this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], permeability: number[], magFieldY: number[], dt: number) {
@@ -138,7 +138,7 @@ export class FDTDSimulator implements Simulator {
         }, {
             output: [cellCount],
             constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt])
+        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
 
         this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[], fieldY: number[], permeability: number[], magFieldZ: number[], dt: number) {
             const index = Math.floor(this.thread.x)
@@ -159,7 +159,7 @@ export class FDTDSimulator implements Simulator {
         }, {
             output: [cellCount],
             constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt])
+        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
 
         this.updateElectricX = this.gpu.createKernel(function (fieldY: number[], fieldZ: number[], permittivity: number[], elFieldX: number[], dt: number) {
             const index = Math.floor(this.thread.x)
@@ -179,7 +179,7 @@ export class FDTDSimulator implements Simulator {
         }, {
             output: [cellCount],
             constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt])
+        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
 
         this.updateElectricY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], permittivity: number[], elFieldY: number[], dt: number) {
             const index = Math.floor(this.thread.x)
@@ -199,7 +199,7 @@ export class FDTDSimulator implements Simulator {
         }, {
             output: [cellCount],
             constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt])
+        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
 
         this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[], fieldY: number[], permittivity: number[], elFieldZ: number[], dt: number) {
             const index = Math.floor(this.thread.x)
@@ -220,7 +220,7 @@ export class FDTDSimulator implements Simulator {
         }, {
             output: [cellCount],
             constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt])
+        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
     }
 
     stepElectric = (dt: number) => {
