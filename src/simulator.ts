@@ -48,6 +48,8 @@ export type SimulationData = {
 export interface Simulator {
     stepElectric: (dt: number) => void
     stepMagnetic: (dt: number) => void
+    resetFields: () => void
+    resetMaterials: () => void
     getData: () => SimulationData
 }
 
@@ -255,6 +257,25 @@ export class FDTDSimulator implements Simulator {
         this.data.magneticFieldZ.values = this.updateMagneticZ(elX, elY, perm, magZ, dt) as number[]
 
         this.data.time += dt / 2
+    }
+
+    resetFields = () => {
+        this.data.time = 0
+        for (let i = 0; i < this.data.electricFieldX.values.length; i++) {
+            this.data.electricFieldX.values[i] = 0
+            this.data.electricFieldY.values[i] = 0
+            this.data.electricFieldZ.values[i] = 0
+            this.data.magneticFieldX.values[i] = 0
+            this.data.magneticFieldY.values[i] = 0
+            this.data.magneticFieldZ.values[i] = 0
+        }
+    }
+
+    resetMaterials = () => {
+        for (let i = 0; i < this.data.permeability.values.length; i++) {
+            this.data.permeability.values[i] = 1
+            this.data.permittivity.values[i] = 1
+        }
     }
 
     getData = () => this.data

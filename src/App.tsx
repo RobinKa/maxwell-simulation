@@ -5,7 +5,7 @@ import { FDTDSimulator, addScalarField3DValue, FlatScalarField3D, setScalarField
 const canvasSize = [window.innerWidth, window.innerHeight]
 const canvasAspect = canvasSize[0] / canvasSize[1]
 
-const dt = 0.02
+const maxDt = 0.02
 const gridSizeLongest = 800
 const gridSize: [number, number, number] = canvasSize[0] >= canvasSize[1] ?
     [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect), 1] :
@@ -65,13 +65,6 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
 function clamp(min: number, max: number, value: number) {
     return Math.max(min, Math.min(max, value))
 }
-
-let renderSim: any = null
-let signalStrength = 0
-let signalPosition = [0, 0]
-let mouseDownPos: [number, number] | null = null
-let drawingPermittivity = false
-let drawingPermeability = false
 
 type LabeledSliderProps = {
     label: string
@@ -134,6 +127,9 @@ type ControlWidgerProps = {
 
     clickOption: number
     setClickOption: (clickOption: number) => void
+
+    resetFields: () => void
+    resetMaterials: () => void
 }
 
 function ControlWidget(props: ControlWidgerProps) {
@@ -143,14 +139,25 @@ function ControlWidget(props: ControlWidgerProps) {
             <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
             <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0.5} max={5} step={0.5} />
             <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+            <button onClick={props.resetFields}>Reset fields</button>
+            <button onClick={props.resetMaterials}>Reset materials</button>
         </div>
     )
 }
 
+let renderSim: any = null
+let signalStrength = 0
+let signalPosition = [0, 0]
+let mouseDownPos: [number, number] | null = null
+let dt = 1 / 60
+let lastDrawTime = -1
+
 export default function () {
     const [brushSize, setBrushSize] = useState(5)
-    const [brushValue, setBrushValue] = useState(1)
+    const [brushValue, setBrushValue] = useState(5)
     const [signalFrequency, setSignalFrequency] = useState(1)
+    const [drawingPermeability, setDrawingPermeability] = useState(false)
+    const [drawingPermittivity, setDrawingPermittivity] = useState(false)
     const [clickOption, setClickOption] = useState(2) // eps, mu, signal
     const optionPermittivityBrush = 0
     const optionPermeabilityBrush = 1
@@ -162,59 +169,51 @@ export default function () {
         let stop = false
 
         const loop = (async () => {
-            let simReady = false
-            let drawReady = false
-            const resolveSimPromise = (resolve: any) => setTimeout(() => { simReady = true; resolve() }, 1000 * dt)
-            const resolveDrawPromise = (resolve: any) => requestAnimationFrame(() => { drawReady = true; resolve() })
-
-            let simPromise = new Promise(resolveSimPromise)
-            let drawPromise = new Promise(resolveDrawPromise)
+            const resolveDrawPromise = (resolve: (value?: unknown) => void) => requestAnimationFrame(t => {
+                if (lastDrawTime >= 0) {
+                    dt = Math.min(maxDt, (t - lastDrawTime) / 1000)
+                }
+                lastDrawTime = t
+                resolve()
+            })
 
             while (!stop) {
-                await Promise.race([simPromise, drawPromise])
+                await new Promise(resolveDrawPromise)
+
+                console.log(dt)
 
                 const simData = simulator.getData()
 
-                if (simReady || simulator.getData().time <= 0) {
-                    if (mouseDownPos !== null) {
-                        signalPosition = mouseDownPos
-                        signalStrength = Math.min(10000, signalStrength + dt * 10000)
-                    }
-
-                    signalStrength *= Math.pow(0.1, dt)
-
-                    if (signalStrength > 1 && drawCanvasRef.current) {
-                        const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition[0] / drawCanvasRef.current.width))
-                        const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
-
-                        for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                            addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength * dt)
-                        }
-                    }
-
-                    simulator.stepMagnetic(dt)
-                    simulator.stepElectric(dt)
-
-                    simReady = false
-                    simPromise = new Promise(resolveSimPromise)
+                if (mouseDownPos !== null) {
+                    signalPosition = mouseDownPos
+                    signalStrength = Math.min(10000, signalStrength + dt * 10000)
                 }
 
-                if (drawReady) {
-                    if (renderSim === null && drawCanvasRef.current !== null) {
-                        renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
-                    }
+                signalStrength *= Math.pow(0.1, dt)
 
-                    if (renderSim !== null) {
-                        renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
-                            simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
-                            simData.permittivity.values, simData.permeability.values)
-                    }
+                if (signalStrength > 1 && drawCanvasRef.current) {
+                    const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition[0] / drawCanvasRef.current.width))
+                    const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
 
-                    drawReady = false
-                    drawPromise = new Promise(resolveDrawPromise)
+                    for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
+                        addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength * dt)
+                    }
                 }
 
-                await Promise.race([simPromise, drawPromise])
+                simulator.stepMagnetic(dt)
+                simulator.stepElectric(dt)
+
+                if (renderSim === null && drawCanvasRef.current !== null) {
+                    renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
+                }
+
+                if (renderSim !== null) {
+                    renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
+                        simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
+                        simData.permittivity.values, simData.permeability.values)
+                }
+
+                await new Promise(resolveDrawPromise)
             }
         })
 
@@ -239,15 +238,24 @@ export default function () {
         }
     }, [brushSize, brushValue])
 
+    const resetMaterials = useCallback(() => {
+        simulator.resetMaterials()
+    }, [])
+
+    const resetFields = useCallback(() => {
+        simulator.resetFields()
+        signalStrength = 0
+    }, [])
+
     const onInputDown = useCallback(([clientX, clientY]: [number, number]) => {
         if (clickOption === optionSignal) {
             mouseDownPos = [clientX, clientY]
         } else if (clickOption === optionPermittivityBrush) {
             changeMaterial(simulator.getData().permittivity, [clientX, clientY])
-            drawingPermittivity = true
+            setDrawingPermittivity(true)
         } else if (clickOption === optionPermeabilityBrush) {
             changeMaterial(simulator.getData().permeability, [clientX, clientY])
-            drawingPermeability = true
+            setDrawingPermeability(true)
         }
     }, [changeMaterial, clickOption])
 
@@ -263,15 +271,15 @@ export default function () {
         if (drawingPermeability) {
             changeMaterial(simulator.getData().permeability, [clientX, clientY])
         }
-    }, [changeMaterial, clickOption])
+    }, [changeMaterial, clickOption, drawingPermeability, drawingPermittivity])
 
     const onInputUp = useCallback(([clientX, clientY]: [number, number]) => {
         if (clickOption === optionSignal) {
             mouseDownPos = null
         } else if (clickOption === optionPermeabilityBrush) {
-            drawingPermeability = false
+            setDrawingPermeability(false)
         } else if (clickOption === optionPermittivityBrush) {
-            drawingPermittivity = false
+            setDrawingPermittivity(false)
         }
     }, [clickOption])
 
@@ -291,6 +299,7 @@ export default function () {
                 brushValue={brushValue} setBrushValue={setBrushValue}
                 signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
                 clickOption={clickOption} setClickOption={setClickOption}
+                resetFields={resetFields} resetMaterials={resetMaterials}
             />
         </div>
     )
