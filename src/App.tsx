@@ -6,6 +6,7 @@ const canvasSize = [window.innerWidth, window.innerHeight]
 const canvasAspect = canvasSize[0] / canvasSize[1]
 
 const maxDt = 0.02
+const minDt = 0.001
 const gridSizeLongest = 800
 const gridSize: [number, number, number] = canvasSize[0] >= canvasSize[1] ?
     [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect), 1] :
@@ -103,7 +104,7 @@ function OptionSelector(props: OptionSelectorProps) {
                 <button key={option} style={{
                     boxSizing: "border-box",
                     border: optionIndex === props.selectedOption ? "4px solid rgb(0, 150, 255)" : "0",
-                    height: "50px",
+                    height: "30px",
                     margin: "5px",
                     width: `${100 / props.options.length}%`, background: "rgb(100, 100, 100)", color: "white"
                 }}
@@ -133,14 +134,25 @@ type ControlWidgerProps = {
 }
 
 function ControlWidget(props: ControlWidgerProps) {
+    const [collapsed, setCollapsed] = useState(false)
+
     return (
-        <div style={{ textAlign: "center", position: "absolute", opacity: 0.8, background: "rgba(33, 33, 33, 100)", padding: "10px", fontWeight: "lighter", color: "white" }}>
-            <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={0} max={100} step={1} />
-            <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
-            <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0.5} max={5} step={0.5} />
-            <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
-            <button onClick={props.resetFields}>Reset fields</button>
-            <button onClick={props.resetMaterials}>Reset materials</button>
+        <div style={{ userSelect: "none" }}>
+            <div style={{ textAlign: "center", position: "absolute", opacity: 0.8, background: "rgba(33, 33, 33, 100)", fontWeight: "lighter", color: "white" }}>
+                <button onClick={e => setCollapsed(!collapsed)} style={{ width: "100%", height: "30px", background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", fontWeight: "bold", cursor: "pointer" }}>
+                    Controls [{collapsed ? "+" : "-"}]
+                </button>
+                {!collapsed && (
+                    <div style={{ padding: "10px" }}>
+                        <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={0} max={100} step={1} />
+                        <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
+                        <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0.5} max={5} step={0.5} />
+                        <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+                        <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>
+                        <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset materials</button>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
@@ -149,7 +161,7 @@ let renderSim: any = null
 let signalStrength = 0
 let signalPosition = [0, 0]
 let mouseDownPos: [number, number] | null = null
-let dt = 1 / 60
+let dt = maxDt
 let lastDrawTime = -1
 
 export default function () {
@@ -171,7 +183,7 @@ export default function () {
         const loop = (async () => {
             const resolveDrawPromise = (resolve: (value?: unknown) => void) => requestAnimationFrame(t => {
                 if (lastDrawTime >= 0) {
-                    dt = Math.min(maxDt, (t - lastDrawTime) / 1000)
+                    dt = Math.max(minDt, Math.min(maxDt, (t - lastDrawTime) / 1000))
                 }
                 lastDrawTime = t
                 resolve()
@@ -285,7 +297,6 @@ export default function () {
 
     return (
         <div>
-
             <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute" }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
                 onMouseMove={e => onInputMove([e.clientX, e.clientY])}
@@ -295,6 +306,11 @@ export default function () {
                 onTouchEnd={e => onInputUp([e.touches[0].clientX, e.touches[0].clientY])}
                 onContextMenu={e => e.preventDefault()}
             />
+
+            <div style={{ position: "absolute", bottom: 10, right: 10, userSelect: "none" }}>
+                <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
+            </div>
+
             <ControlWidget brushSize={brushSize} setBrushSize={setBrushSize}
                 brushValue={brushValue} setBrushValue={setBrushValue}
                 signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
