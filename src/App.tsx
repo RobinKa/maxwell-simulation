@@ -5,9 +5,8 @@ import { FDTDSimulator, addScalarField3DValue, FlatScalarField3D, setScalarField
 const canvasSize = [window.innerWidth, window.innerHeight]
 const canvasAspect = canvasSize[0] / canvasSize[1]
 
-const maxDt = 0.02
-const minDt = 0.001
-const gridSizeLongest = 800
+const dt = 0.02
+const gridSizeLongest = 600
 const gridSize: [number, number, number] = canvasSize[0] >= canvasSize[1] ?
     [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect), 1] :
     [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest, 1]
@@ -161,8 +160,6 @@ let renderSim: any = null
 let signalStrength = 0
 let signalPosition = [0, 0]
 let mouseDownPos: [number, number] | null = null
-let dt = maxDt
-let lastDrawTime = -1
 
 export default function () {
     const [brushSize, setBrushSize] = useState(5)
@@ -177,49 +174,44 @@ export default function () {
 
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
+    const simStep = useCallback(() => {
+        const simData = simulator.getData()
+
+        if (mouseDownPos !== null) {
+            signalPosition = mouseDownPos
+            signalStrength = Math.min(10000, signalStrength + dt * 10000)
+        }
+
+        signalStrength *= Math.pow(0.1, dt)
+
+        if (signalStrength > 1 && drawCanvasRef.current) {
+            const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition[0] / drawCanvasRef.current.width))
+            const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
+
+            for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
+                addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength * dt)
+            }
+        }
+
+        simulator.stepMagnetic(dt)
+        simulator.stepElectric(dt)
+    }, [signalFrequency])
+
+    useEffect(() => {
+        const timer = setInterval(simStep, 1000 * dt)
+        return () => clearInterval(timer)
+    }, [simStep])
+
     const startLoop = useCallback(() => {
         let stop = false
 
         const loop = (async () => {
-            const resolveDrawPromise = (resolve: (value?: unknown) => void) => requestAnimationFrame(t => {
-                if (lastDrawTime >= 0) {
-                    dt = Math.max(minDt, Math.min(maxDt, (t - lastDrawTime) / 1000))
-                }
-                lastDrawTime = t
-                resolve()
-            })
+            const resolveDrawPromise = (resolve: (value?: unknown) => void) => requestAnimationFrame(resolve)
 
             while (!stop) {
-                await new Promise(resolveDrawPromise)
-
-                console.log(dt)
-
                 const simData = simulator.getData()
 
-                if (mouseDownPos !== null) {
-                    signalPosition = mouseDownPos
-                    signalStrength = Math.min(10000, signalStrength + dt * 10000)
-                }
-
-                signalStrength *= Math.pow(0.1, dt)
-
-                if (signalStrength > 1 && drawCanvasRef.current) {
-                    const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition[0] / drawCanvasRef.current.width))
-                    const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
-
-                    for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                        addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength * dt)
-                    }
-                }
-
-                simulator.stepMagnetic(dt)
-                simulator.stepElectric(dt)
-
-                if (renderSim === null && drawCanvasRef.current !== null) {
-                    renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
-                }
-
-                if (renderSim !== null) {
+                if (simData.time > 0 && renderSim !== null) {
                     renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
                         simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
                         simData.permittivity.values, simData.permeability.values)
@@ -232,16 +224,22 @@ export default function () {
         loop()
 
         return () => { stop = true }
-    }, [signalFrequency])
+    }, [])
 
-    useEffect(startLoop, [startLoop])
+    useEffect(() => {
+        if (drawCanvasRef.current) {
+            renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
+        } else {
+            throw new Error("Canvas ref was null")
+        }
+
+        startLoop()
+    }, [startLoop])
 
     const changeMaterial = useCallback((field: FlatScalarField3D, canvasPos: [number, number]) => {
         const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
         const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
         const brushHalfSize = Math.round(brushSize / 2)
-
-        console.log(brushHalfSize)
 
         for (let x = Math.max(0, centerX - brushHalfSize); x <= Math.min(gridSize[0] - 1, centerX + brushHalfSize); x++) {
             for (let y = Math.max(0, centerY - brushHalfSize); y <= Math.min(gridSize[1] - 1, centerY + brushHalfSize); y++) {
