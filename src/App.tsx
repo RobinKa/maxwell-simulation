@@ -5,8 +5,10 @@ import { FDTDSimulator, addScalarField3DValue, updateScalarField3DValue, FlatSca
 const canvasSize = [window.innerWidth, window.innerHeight]
 
 const dt = 0.02
-const gridSizeX = 1000
-const gridSize: [number, number, number] = [gridSizeX, Math.ceil(gridSizeX / canvasSize[0] * canvasSize[1]), 1]
+const gridSizeLongest = 800
+const gridSize: [number, number, number] = canvasSize[0] >= canvasSize[1] ?
+    [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect), 1] :
+    [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest, 1]
 const cellSize = 0.04
 
 const simulator = new FDTDSimulator(gridSize, cellSize)
