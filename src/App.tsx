@@ -27,11 +27,8 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const gy = this.constants.gridSizeY as number
         const gz = this.constants.gridSizeZ as number
 
-        const ox = this.output.x as number
-        const oy = this.output.y as number
-
-        const x = gx * this.thread.x! / ox
-        const y = gy * (1 - this.thread.y! / oy)
+        const x = gx * this.thread.x! / (this.output.x as number)
+        const y = gy * (1 - this.thread.y! / (this.output.y as number))
         const xa = Math.floor(x)
         const ya = Math.floor(y)
         const xb = xa + 1
@@ -68,14 +65,8 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
 
         const scale = 100
 
-        const eMixTop = alphaX * eBA + (1 - alphaX) * eAA
-        const eMixBottom = alphaX * eBB + (1 - alphaX) * eAB
-        const eMix = Math.max(0, Math.min(scale, alphaY * eMixBottom + (1 - alphaY) * eMixTop))
-
-        const mMixTop = alphaX * mBA + (1 - alphaX) * mAA
-        const mMixBottom = alphaX * mBB + (1 - alphaX) * mAB
-
-        const mMix = Math.max(0, Math.min(scale, alphaY * mMixBottom + (1 - alphaY) * mMixTop))
+        const eMix = Math.max(0, Math.min(scale, alphaY * (alphaX * eBB + (1 - alphaX) * eAB) + (1 - alphaY) * (alphaX * eBA + (1 - alphaX) * eAA)))
+        const mMix = Math.max(0, Math.min(scale, alphaY * (alphaX * mBB + (1 - alphaX) * mAB) + (1 - alphaY) * (alphaX * mBA + (1 - alphaX) * mAA)))
 
         const permittivityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permittivity, gx, gy, gz, xa, ya, z))) / 4))
         const permeabilityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permeability, gx, gy, gz, xa, ya, z))) / 4))
