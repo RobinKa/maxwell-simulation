@@ -1,13 +1,13 @@
 import React, { useRef, useCallback, useEffect } from 'react'
 import { GPU } from "gpu.js"
-import { FDTDSimulator, addScalarField3DValue, updateScalarField3DValue } from "./simulator"
+import { FDTDSimulator, addScalarField3DValue, updateScalarField3DValue, FlatScalarField3D } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
 
-const dt = 0.01
-const gridSizeX = 300
+const dt = 0.02
+const gridSizeX = 1000
 const gridSize: [number, number, number] = [gridSizeX, Math.ceil(gridSizeX / canvasSize[0] * canvasSize[1]), 1]
-const cellSize = 0.05
+const cellSize = 0.04
 
 const simulator = new FDTDSimulator(gridSize, cellSize)
 
@@ -31,24 +31,24 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const y = gy * (1 - this.thread.y! / (this.output.y as number))
         const xa = Math.floor(x)
         const ya = Math.floor(y)
-        const xb = xa + 1
-        const yb = ya + 1
+        //const xb = xa + 1
+        //const yb = ya + 1
 
-        const alphaX = xb === xa ? 0 : (x - xa) / (xb - xa)
-        const alphaY = yb === ya ? 0 : (y - ya) / (yb - ya)
+        //const alphaX = xb === xa ? 0 : (x - xa) / (xb - xa)
+        //const alphaY = yb === ya ? 0 : (y - ya) / (yb - ya)
 
         const z = Math.floor(gz / 2)
 
         const eAA = getAt(electricFieldX, gx, gy, gz, xa, ya, z) * getAt(electricFieldX, gx, gy, gz, xa, ya, z) + getAt(electricFieldY, gx, gy, gz, xa, ya, z) * getAt(electricFieldY, gx, gy, gz, xa, ya, z) + getAt(electricFieldZ, gx, gy, gz, xa, ya, z) * getAt(electricFieldZ, gx, gy, gz, xa, ya, z)
-        const eAB = getAt(electricFieldX, gx, gy, gz, xa, yb, z) * getAt(electricFieldX, gx, gy, gz, xa, yb, z) + getAt(electricFieldY, gx, gy, gz, xa, yb, z) * getAt(electricFieldY, gx, gy, gz, xa, yb, z) + getAt(electricFieldZ, gx, gy, gz, xa, yb, z) * getAt(electricFieldZ, gx, gy, gz, xa, yb, z)
+        /*const eAB = getAt(electricFieldX, gx, gy, gz, xa, yb, z) * getAt(electricFieldX, gx, gy, gz, xa, yb, z) + getAt(electricFieldY, gx, gy, gz, xa, yb, z) * getAt(electricFieldY, gx, gy, gz, xa, yb, z) + getAt(electricFieldZ, gx, gy, gz, xa, yb, z) * getAt(electricFieldZ, gx, gy, gz, xa, yb, z)
         const eBA = getAt(electricFieldX, gx, gy, gz, xb, ya, z) * getAt(electricFieldX, gx, gy, gz, xb, ya, z) + getAt(electricFieldY, gx, gy, gz, xb, ya, z) * getAt(electricFieldY, gx, gy, gz, xb, ya, z) + getAt(electricFieldZ, gx, gy, gz, xb, ya, z) * getAt(electricFieldZ, gx, gy, gz, xb, ya, z)
         const eBB = getAt(electricFieldX, gx, gy, gz, xb, yb, z) * getAt(electricFieldX, gx, gy, gz, xb, yb, z) + getAt(electricFieldY, gx, gy, gz, xb, yb, z) * getAt(electricFieldY, gx, gy, gz, xb, yb, z) + getAt(electricFieldZ, gx, gy, gz, xb, yb, z) * getAt(electricFieldZ, gx, gy, gz, xb, yb, z)
-
+*/
         // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
         const magXAA = (getAt(magneticFieldX, gx, gy, gz, xa, ya, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, ya - 1, z)) / 2
         const magYAA = (getAt(magneticFieldY, gx, gy, gz, xa, ya, z) + getAt(magneticFieldY, gx, gy, gz, xa - 1, ya - 1, z)) / 2
         const magZAA = (getAt(magneticFieldZ, gx, gy, gz, xa, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xa - 1, ya - 1, z)) / 2
-        const magXAB = (getAt(magneticFieldX, gx, gy, gz, xa, yb, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, yb - 1, z)) / 2
+        /*const magXAB = (getAt(magneticFieldX, gx, gy, gz, xa, yb, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, yb - 1, z)) / 2
         const magYAB = (getAt(magneticFieldY, gx, gy, gz, xa, yb, z) + getAt(magneticFieldY, gx, gy, gz, xa - 1, yb - 1, z)) / 2
         const magZAB = (getAt(magneticFieldZ, gx, gy, gz, xa, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xa - 1, yb - 1, z)) / 2
         const magXBA = (getAt(magneticFieldX, gx, gy, gz, xb, ya, z) + getAt(magneticFieldX, gx, gy, gz, xb - 1, ya - 1, z)) / 2
@@ -56,17 +56,17 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const magZBA = (getAt(magneticFieldZ, gx, gy, gz, xb, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xb - 1, ya - 1, z)) / 2
         const magXBB = (getAt(magneticFieldX, gx, gy, gz, xb, yb, z) + getAt(magneticFieldX, gx, gy, gz, xb - 1, yb - 1, z)) / 2
         const magYBB = (getAt(magneticFieldY, gx, gy, gz, xb, yb, z) + getAt(magneticFieldY, gx, gy, gz, xb - 1, yb - 1, z)) / 2
-        const magZBB = (getAt(magneticFieldZ, gx, gy, gz, xb, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xb - 1, yb - 1, z)) / 2
+        const magZBB = (getAt(magneticFieldZ, gx, gy, gz, xb, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xb - 1, yb - 1, z)) / 2*/
 
         const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
-        const mAB = magXAB * magXAB + magYAB * magYAB + magZAB * magZAB
+        /*const mAB = magXAB * magXAB + magYAB * magYAB + magZAB * magZAB
         const mBA = magXBA * magXBA + magYBA * magYBA + magZBA * magZBA
-        const mBB = magXBB * magXBB + magYBB * magYBB + magZBB * magZBB
+        const mBB = magXBB * magXBB + magYBB * magYBB + magZBB * magZBB*/
 
-        const scale = 100
+        const scale = 15
 
-        const eMix = Math.max(0, Math.min(scale, alphaY * (alphaX * eBB + (1 - alphaX) * eAB) + (1 - alphaY) * (alphaX * eBA + (1 - alphaX) * eAA)))
-        const mMix = Math.max(0, Math.min(scale, alphaY * (alphaX * mBB + (1 - alphaX) * mAB) + (1 - alphaY) * (alphaX * mBA + (1 - alphaX) * mAA)))
+        //const eMix = Math.max(0, Math.min(scale, alphaY * (alphaX * eBB + (1 - alphaX) * eAB) + (1 - alphaY) * (alphaX * eBA + (1 - alphaX) * eAA)))
+        //const mMix = Math.max(0, Math.min(scale, alphaY * (alphaX * mBB + (1 - alphaX) * mAB) + (1 - alphaY) * (alphaX * mBA + (1 - alphaX) * mAA)))
 
         const permittivityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permittivity, gx, gy, gz, xa, ya, z))) / 4))
         const permeabilityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permeability, gx, gy, gz, xa, ya, z))) / 4))
@@ -74,7 +74,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const backgroundX = (Math.abs(x % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(y % 1 - 0.5) < 0.25 ? 1 : 0)
         const backgroundY = 1 - backgroundX
 
-        this.color(eMix / scale + 0.5 * backgroundX * permittivityValue, eMix / scale + mMix / scale, mMix / scale + 0.5 * backgroundY * permeabilityValue)
+        this.color(eAA / scale + 0.5 * backgroundX * permittivityValue, eAA / scale + mAA / scale, mAA / scale + 0.5 * backgroundY * permeabilityValue)
     }, {
         output: [canvasSize[0], canvasSize[1]],
         constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
@@ -161,30 +161,32 @@ export default function () {
 
     useEffect(startLoop, [startLoop])
 
+    const changeMaterial = useCallback((field: FlatScalarField3D, canvasPos: [number, number], factor: number) => {
+        const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
+        const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
+        const brushHalfSize = 2
+
+        for (let x = Math.max(0, centerX - brushHalfSize); x <= Math.min(gridSize[0] - 1, centerX + brushHalfSize); x++) {
+            for (let y = Math.max(0, centerY - brushHalfSize); y <= Math.min(gridSize[1] - 1, centerY + brushHalfSize); y++) {
+                updateScalarField3DValue(field, x, y, 0, val => Math.min(1000, Math.max(1, factor * val)))
+            }
+        }
+    }, [])
+
     const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
         if (e.button === 0) {
             mouseDownPos = [e.clientX, e.clientY]
             e.preventDefault()
         } else if (e.button === 2) {
-            const x = Math.round(gridSize[0] * (e.clientX / canvasSize[0]))
-            const y = Math.round(gridSize[1] * (e.clientY / canvasSize[1]))
-
-            const factor = e.ctrlKey ? 0.1 : 10
-
-            updateScalarField3DValue(simulator.getData().permittivity, x, y, 0, val => Math.min(1000, Math.max(0.4, factor * val)))
+            changeMaterial(simulator.getData().permittivity, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
             rightDown = true
             e.preventDefault()
         } else if (e.button === 1) {
-            const x = Math.round(gridSize[0] * (e.clientX / canvasSize[0]))
-            const y = Math.round(gridSize[1] * (e.clientY / canvasSize[1]))
-            
-            const factor = e.ctrlKey ? 0.1 : 10
-
-            updateScalarField3DValue(simulator.getData().permeability, x, y, 0, val => Math.min(1000, Math.max(0.4, factor * val)))
+            changeMaterial(simulator.getData().permeability, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
             middleDown = true
             e.preventDefault()
         }
-    }, [])
+    }, [changeMaterial])
 
     const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
         if (e.button === 0 && mouseDownPos !== null) {
@@ -193,33 +195,26 @@ export default function () {
         }
 
         if (rightDown) {
-            const x = Math.round(gridSize[0] * (e.clientX / canvasSize[0]))
-            const y = Math.round(gridSize[1] * (e.clientY / canvasSize[1]))
-
-            const factor = e.ctrlKey ? 0.1 : 10
-
-            updateScalarField3DValue(simulator.getData().permittivity, x, y, 0, val => Math.min(1000, Math.max(0.4, factor * val)))
+            changeMaterial(simulator.getData().permittivity, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
             e.preventDefault()
         }
 
         if (middleDown) {
-            const x = Math.round(gridSize[0] * (e.clientX / canvasSize[0]))
-            const y = Math.round(gridSize[1] * (e.clientY / canvasSize[1]))
-            
-            const factor = e.ctrlKey ? 0.1 : 10
-
-            updateScalarField3DValue(simulator.getData().permeability, x, y, 0, val => Math.min(1000, Math.max(0.4, factor * val)))
+            changeMaterial(simulator.getData().permeability, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
             e.preventDefault()
         }
-    }, [])
+    }, [changeMaterial])
 
     const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
         if (e.button === 0) {
             mouseDownPos = null
+            e.preventDefault()
         } else if (e.button === 1) {
             middleDown = false
+            e.preventDefault()
         } else if (e.button === 2) {
             rightDown = false
+            e.preventDefault()
         }
     }, [])
 
