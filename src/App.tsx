@@ -1,8 +1,9 @@
-import React, { useRef, useCallback, useEffect } from 'react'
+import React, { useRef, useCallback, useEffect, useState } from 'react'
 import { GPU } from "gpu.js"
-import { FDTDSimulator, addScalarField3DValue, updateScalarField3DValue, FlatScalarField3D } from "./simulator"
+import { FDTDSimulator, addScalarField3DValue, FlatScalarField3D, setScalarField3DValue } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
+const canvasAspect = canvasSize[0] / canvasSize[1]
 
 const dt = 0.02
 const gridSizeLongest = 800
@@ -33,42 +34,19 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
         const y = gy * (1 - this.thread.y! / (this.output.y as number))
         const xa = Math.floor(x)
         const ya = Math.floor(y)
-        //const xb = xa + 1
-        //const yb = ya + 1
-
-        //const alphaX = xb === xa ? 0 : (x - xa) / (xb - xa)
-        //const alphaY = yb === ya ? 0 : (y - ya) / (yb - ya)
 
         const z = Math.floor(gz / 2)
 
         const eAA = getAt(electricFieldX, gx, gy, gz, xa, ya, z) * getAt(electricFieldX, gx, gy, gz, xa, ya, z) + getAt(electricFieldY, gx, gy, gz, xa, ya, z) * getAt(electricFieldY, gx, gy, gz, xa, ya, z) + getAt(electricFieldZ, gx, gy, gz, xa, ya, z) * getAt(electricFieldZ, gx, gy, gz, xa, ya, z)
-        /*const eAB = getAt(electricFieldX, gx, gy, gz, xa, yb, z) * getAt(electricFieldX, gx, gy, gz, xa, yb, z) + getAt(electricFieldY, gx, gy, gz, xa, yb, z) * getAt(electricFieldY, gx, gy, gz, xa, yb, z) + getAt(electricFieldZ, gx, gy, gz, xa, yb, z) * getAt(electricFieldZ, gx, gy, gz, xa, yb, z)
-        const eBA = getAt(electricFieldX, gx, gy, gz, xb, ya, z) * getAt(electricFieldX, gx, gy, gz, xb, ya, z) + getAt(electricFieldY, gx, gy, gz, xb, ya, z) * getAt(electricFieldY, gx, gy, gz, xb, ya, z) + getAt(electricFieldZ, gx, gy, gz, xb, ya, z) * getAt(electricFieldZ, gx, gy, gz, xb, ya, z)
-        const eBB = getAt(electricFieldX, gx, gy, gz, xb, yb, z) * getAt(electricFieldX, gx, gy, gz, xb, yb, z) + getAt(electricFieldY, gx, gy, gz, xb, yb, z) * getAt(electricFieldY, gx, gy, gz, xb, yb, z) + getAt(electricFieldZ, gx, gy, gz, xb, yb, z) * getAt(electricFieldZ, gx, gy, gz, xb, yb, z)
-*/
+
         // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
         const magXAA = (getAt(magneticFieldX, gx, gy, gz, xa, ya, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, ya - 1, z)) / 2
         const magYAA = (getAt(magneticFieldY, gx, gy, gz, xa, ya, z) + getAt(magneticFieldY, gx, gy, gz, xa - 1, ya - 1, z)) / 2
         const magZAA = (getAt(magneticFieldZ, gx, gy, gz, xa, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xa - 1, ya - 1, z)) / 2
-        /*const magXAB = (getAt(magneticFieldX, gx, gy, gz, xa, yb, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, yb - 1, z)) / 2
-        const magYAB = (getAt(magneticFieldY, gx, gy, gz, xa, yb, z) + getAt(magneticFieldY, gx, gy, gz, xa - 1, yb - 1, z)) / 2
-        const magZAB = (getAt(magneticFieldZ, gx, gy, gz, xa, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xa - 1, yb - 1, z)) / 2
-        const magXBA = (getAt(magneticFieldX, gx, gy, gz, xb, ya, z) + getAt(magneticFieldX, gx, gy, gz, xb - 1, ya - 1, z)) / 2
-        const magYBA = (getAt(magneticFieldY, gx, gy, gz, xb, ya, z) + getAt(magneticFieldY, gx, gy, gz, xb - 1, ya - 1, z)) / 2
-        const magZBA = (getAt(magneticFieldZ, gx, gy, gz, xb, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xb - 1, ya - 1, z)) / 2
-        const magXBB = (getAt(magneticFieldX, gx, gy, gz, xb, yb, z) + getAt(magneticFieldX, gx, gy, gz, xb - 1, yb - 1, z)) / 2
-        const magYBB = (getAt(magneticFieldY, gx, gy, gz, xb, yb, z) + getAt(magneticFieldY, gx, gy, gz, xb - 1, yb - 1, z)) / 2
-        const magZBB = (getAt(magneticFieldZ, gx, gy, gz, xb, yb, z) + getAt(magneticFieldZ, gx, gy, gz, xb - 1, yb - 1, z)) / 2*/
 
         const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
-        /*const mAB = magXAB * magXAB + magYAB * magYAB + magZAB * magZAB
-        const mBA = magXBA * magXBA + magYBA * magYBA + magZBA * magZBA
-        const mBB = magXBB * magXBB + magYBB * magYBB + magZBB * magZBB*/
 
         const scale = 15
-
-        //const eMix = Math.max(0, Math.min(scale, alphaY * (alphaX * eBB + (1 - alphaX) * eAB) + (1 - alphaY) * (alphaX * eBA + (1 - alphaX) * eAA)))
-        //const mMix = Math.max(0, Math.min(scale, alphaY * (alphaX * mBB + (1 - alphaX) * mAB) + (1 - alphaY) * (alphaX * mBA + (1 - alphaX) * mAA)))
 
         const permittivityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permittivity, gx, gy, gz, xa, ya, z))) / 4))
         const permeabilityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permeability, gx, gy, gz, xa, ya, z))) / 4))
@@ -92,10 +70,92 @@ let renderSim: any = null
 let signalStrength = 0
 let signalPosition = [0, 0]
 let mouseDownPos: [number, number] | null = null
-let rightDown = false
-let middleDown = false
+let drawingPermittivity = false
+let drawingPermeability = false
+
+type LabeledSliderProps = {
+    label: string
+    value: number,
+    setValue: (value: number) => void
+    min: number
+    max: number
+    step: number
+}
+
+function LabeledSlider(props: LabeledSliderProps) {
+    return (
+        <div>
+            <label>{props.label}</label>
+            <div>
+                <input type="range" min={props.min} max={props.max} value={props.value} step={props.step}
+                    onChange={e => props.setValue(parseFloat(e.target.value))} style={{ height: 10, width: "100%" }} />
+                <div style={{ textAlign: "center", lineHeight: 0.1, marginBottom: "7px" }}>
+                    {props.value}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+type OptionSelectorProps = {
+    options: string[]
+    selectedOption: number
+    setSelectedOption: (selectedOption: number) => void
+}
+
+function OptionSelector(props: OptionSelectorProps) {
+    return (
+        <div>
+            {props.options.map((option, optionIndex) =>
+                <button key={option} style={{
+                    boxSizing: "border-box",
+                    border: optionIndex === props.selectedOption ? "4px solid rgb(0, 150, 255)" : "0",
+                    height: "50px",
+                    margin: "5px",
+                    width: `${100 / props.options.length}%`, background: "rgb(100, 100, 100)", color: "white"
+                }}
+                    onClick={e => props.setSelectedOption(optionIndex)}>
+                    {option}
+                </button>
+            )}
+        </div>
+    )
+}
+
+type ControlWidgerProps = {
+    brushSize: number,
+    setBrushSize: (brushSize: number) => void
+
+    brushValue: number,
+    setBrushValue: (brushValue: number) => void
+
+    signalFrequency: number,
+    setSignalFrequency: (signalFrequency: number) => void
+
+    clickOption: number
+    setClickOption: (clickOption: number) => void
+}
+
+function ControlWidget(props: ControlWidgerProps) {
+    return (
+        <div style={{ textAlign: "center", position: "absolute", opacity: 0.8, background: "rgba(33, 33, 33, 100)", padding: "10px", fontWeight: "lighter", color: "white" }}>
+            <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={0} max={100} step={1} />
+            <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
+            <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0.5} max={5} step={0.5} />
+            <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+        </div>
+    )
+}
 
 export default function () {
+    const [brushSize, setBrushSize] = useState(5)
+    const [brushValue, setBrushValue] = useState(1)
+    const [signalFrequency, setSignalFrequency] = useState(1)
+    const [clickOption, setClickOption] = useState(2) // eps, mu, signal
+    const optionPermittivityBrush = 0
+    const optionPermeabilityBrush = 1
+    const optionSignal = 2
+
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
     const startLoop = useCallback(() => {
@@ -103,8 +163,9 @@ export default function () {
 
         const loop = (async () => {
             let simReady = false
+            let drawReady = false
             const resolveSimPromise = (resolve: any) => setTimeout(() => { simReady = true; resolve() }, 1000 * dt)
-            const resolveDrawPromise = (resolve: any) => requestAnimationFrame(resolve)
+            const resolveDrawPromise = (resolve: any) => requestAnimationFrame(() => { drawReady = true; resolve() })
 
             let simPromise = new Promise(resolveSimPromise)
             let drawPromise = new Promise(resolveDrawPromise)
@@ -127,17 +188,18 @@ export default function () {
                         const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
 
                         for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                            //addScalarField3DValue(simData.electricFieldX, px, py, z, sig[0] * dt / 2)
-                            //addScalarField3DValue(simData.electricFieldY, px, py, z, sig[1] * dt / 2)
-                            addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(2 * 2 * Math.PI * simData.time) * signalStrength * dt)
+                            addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength * dt)
                         }
                     }
 
                     simulator.stepMagnetic(dt)
                     simulator.stepElectric(dt)
 
+                    simReady = false
                     simPromise = new Promise(resolveSimPromise)
-                } else {
+                }
+
+                if (drawReady) {
                     if (renderSim === null && drawCanvasRef.current !== null) {
                         renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
                     }
@@ -148,10 +210,10 @@ export default function () {
                             simData.permittivity.values, simData.permeability.values)
                     }
 
+                    drawReady = false
                     drawPromise = new Promise(resolveDrawPromise)
                 }
 
-                simReady = false
                 await Promise.race([simPromise, drawPromise])
             }
         })
@@ -159,73 +221,77 @@ export default function () {
         loop()
 
         return () => { stop = true }
-    }, [])
+    }, [signalFrequency])
 
     useEffect(startLoop, [startLoop])
 
-    const changeMaterial = useCallback((field: FlatScalarField3D, canvasPos: [number, number], factor: number) => {
+    const changeMaterial = useCallback((field: FlatScalarField3D, canvasPos: [number, number]) => {
         const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
         const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
-        const brushHalfSize = 2
+        const brushHalfSize = Math.round(brushSize / 2)
+
+        console.log(brushHalfSize)
 
         for (let x = Math.max(0, centerX - brushHalfSize); x <= Math.min(gridSize[0] - 1, centerX + brushHalfSize); x++) {
             for (let y = Math.max(0, centerY - brushHalfSize); y <= Math.min(gridSize[1] - 1, centerY + brushHalfSize); y++) {
-                updateScalarField3DValue(field, x, y, 0, val => Math.min(1000, Math.max(1, factor * val)))
+                setScalarField3DValue(field, x, y, 0, brushValue)
             }
         }
-    }, [])
+    }, [brushSize, brushValue])
 
-    const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
-        if (e.button === 0) {
-            mouseDownPos = [e.clientX, e.clientY]
-            e.preventDefault()
-        } else if (e.button === 2) {
-            changeMaterial(simulator.getData().permittivity, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
-            rightDown = true
-            e.preventDefault()
-        } else if (e.button === 1) {
-            changeMaterial(simulator.getData().permeability, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
-            middleDown = true
-            e.preventDefault()
+    const onInputDown = useCallback(([clientX, clientY]: [number, number]) => {
+        if (clickOption === optionSignal) {
+            mouseDownPos = [clientX, clientY]
+        } else if (clickOption === optionPermittivityBrush) {
+            changeMaterial(simulator.getData().permittivity, [clientX, clientY])
+            drawingPermittivity = true
+        } else if (clickOption === optionPermeabilityBrush) {
+            changeMaterial(simulator.getData().permeability, [clientX, clientY])
+            drawingPermeability = true
         }
-    }, [changeMaterial])
+    }, [changeMaterial, clickOption])
 
-    const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
-        if (e.button === 0 && mouseDownPos !== null) {
-            mouseDownPos = [e.clientX, e.clientY]
-            e.preventDefault()
+    const onInputMove = useCallback(([clientX, clientY]: [number, number]) => {
+        if (clickOption === optionSignal && mouseDownPos !== null) {
+            mouseDownPos = [clientX, clientY]
         }
 
-        if (rightDown) {
-            changeMaterial(simulator.getData().permittivity, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
-            e.preventDefault()
+        if (drawingPermittivity) {
+            changeMaterial(simulator.getData().permittivity, [clientX, clientY])
         }
 
-        if (middleDown) {
-            changeMaterial(simulator.getData().permeability, [e.clientX, e.clientY], e.ctrlKey ? 0.1 : 10)
-            e.preventDefault()
+        if (drawingPermeability) {
+            changeMaterial(simulator.getData().permeability, [clientX, clientY])
         }
-    }, [changeMaterial])
+    }, [changeMaterial, clickOption])
 
-    const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => {
-        if (e.button === 0) {
+    const onInputUp = useCallback(([clientX, clientY]: [number, number]) => {
+        if (clickOption === optionSignal) {
             mouseDownPos = null
-            e.preventDefault()
-        } else if (e.button === 1) {
-            middleDown = false
-            e.preventDefault()
-        } else if (e.button === 2) {
-            rightDown = false
-            e.preventDefault()
+        } else if (clickOption === optionPermeabilityBrush) {
+            drawingPermeability = false
+        } else if (clickOption === optionPermittivityBrush) {
+            drawingPermittivity = false
         }
-    }, [])
+    }, [clickOption])
 
     return (
-        <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onContextMenu={e => e.preventDefault()}
-        />
+        <div>
+
+            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute" }}
+                onMouseDown={e => onInputDown([e.clientX, e.clientY])}
+                onMouseMove={e => onInputMove([e.clientX, e.clientY])}
+                onMouseUp={e => onInputUp([e.clientX, e.clientY])}
+                onTouchStart={e => onInputDown([e.touches[0].clientX, e.touches[0].clientY])}
+                onTouchMove={e => onInputMove([e.touches[0].clientX, e.touches[0].clientY])}
+                onTouchEnd={e => onInputUp([e.touches[0].clientX, e.touches[0].clientY])}
+                onContextMenu={e => e.preventDefault()}
+            />
+            <ControlWidget brushSize={brushSize} setBrushSize={setBrushSize}
+                brushValue={brushValue} setBrushValue={setBrushValue}
+                signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
+                clickOption={clickOption} setClickOption={setClickOption}
+            />
+        </div>
     )
 }
