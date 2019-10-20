@@ -148,7 +148,7 @@ function ControlWidget(props: ControlWidgerProps) {
                     <div style={{ padding: "10px" }}>
                         <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={0} max={100} step={1} />
                         <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
-                        <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0.5} max={5} step={0.5} />
+                        <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={5} step={0.5} />
                         <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
                         <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>
                         <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset materials</button>
@@ -172,7 +172,6 @@ export default function () {
 
     const [mousePosition, setMousePosition] = useState<[number, number] | null>(null)
 
-    const signalPosition = useRef([0, 0])
     const signalStrength = useRef(0)
     const mouseDownPos = useRef<[number, number] | null>(null)
     const renderSim = useRef<IKernelRunShortcut | null>(null)
@@ -181,25 +180,18 @@ export default function () {
     const simStep = useCallback(() => {
         const simData = simulator.getData()
 
-        if (mouseDownPos.current !== null) {
-            signalPosition.current = mouseDownPos.current
-            signalStrength.current = Math.min(10000, signalStrength.current + dt * 10000)
-        }
+        if (mouseDownPos.current !== null && drawCanvasRef.current) {
+            const px = clamp(0, simData.electricSourceFieldZ.shape[0] - 1, Math.floor(simData.electricSourceFieldZ.shape[0] * mouseDownPos.current[0] / drawCanvasRef.current.width))
+            const py = clamp(0, simData.electricSourceFieldZ.shape[1] - 1, Math.floor(simData.electricSourceFieldZ.shape[1] * mouseDownPos.current[1] / drawCanvasRef.current.height))
 
-        signalStrength.current *= Math.pow(0.1, dt)
-
-        if (signalStrength.current > 1 && drawCanvasRef.current) {
-            const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition.current[0] / drawCanvasRef.current.width))
-            const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition.current[1] / drawCanvasRef.current.height))
-
-            for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength.current * dt)
+            for (let z = 0; z < simData.electricSourceFieldZ.shape[2]; z++) {
+                addScalarField3DValue(simData.electricSourceFieldZ, px, py, z, -brushValue * 1000 * Math.cos(2 * Math.PI * signalFrequency * simData.time) * dt)
             }
         }
 
         simulator.stepMagnetic(dt)
         simulator.stepElectric(dt)
-    }, [signalFrequency])
+    }, [signalFrequency, brushValue])
 
     useEffect(() => {
         const timer = setInterval(simStep, 1000 * dt)
