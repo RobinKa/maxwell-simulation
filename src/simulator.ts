@@ -6,10 +6,7 @@ export type FlatScalarField3D = {
 }
 
 function makeScalarField3D(shape: [number, number, number], value: number = 0) {
-    const field = []
-    for (let i = 0; i < shape[0] * shape[1] * shape[2]; i++) {
-        field.push(value)
-    }
+    const field = Array(shape[0] * shape[1] * shape[2]).fill(value)
     return { values: field, shape: shape }
 }
 
@@ -86,7 +83,7 @@ export class FDTDSimulator implements Simulator {
                 return 0
             }
 
-            return field[x + y * shapeX + z * shapeX * shapeZ]
+            return field[x + y * shapeX + z * shapeX * shapeY]
         }
 
         function getX(index: number, shapeX: number) {
@@ -261,21 +258,17 @@ export class FDTDSimulator implements Simulator {
 
     resetFields = () => {
         this.data.time = 0
-        for (let i = 0; i < this.data.electricFieldX.values.length; i++) {
-            this.data.electricFieldX.values[i] = 0
-            this.data.electricFieldY.values[i] = 0
-            this.data.electricFieldZ.values[i] = 0
-            this.data.magneticFieldX.values[i] = 0
-            this.data.magneticFieldY.values[i] = 0
-            this.data.magneticFieldZ.values[i] = 0
-        }
+        this.data.electricFieldX.values.fill(0)
+        this.data.electricFieldY.values.fill(0)
+        this.data.electricFieldZ.values.fill(0)
+        this.data.magneticFieldX.values.fill(0)
+        this.data.magneticFieldY.values.fill(0)
+        this.data.magneticFieldZ.values.fill(0)
     }
 
     resetMaterials = () => {
-        for (let i = 0; i < this.data.permeability.values.length; i++) {
-            this.data.permeability.values[i] = 1
-            this.data.permittivity.values[i] = 1
-        }
+        this.data.permeability.values.fill(1)
+        this.data.permittivity.values.fill(1)
     }
 
     getData = () => this.data
