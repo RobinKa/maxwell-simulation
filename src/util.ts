@@ -46,7 +46,7 @@ export function imageUrlToSimulatorMap(imageUrl: string, targetSize: [number, nu
     image.onload = e => {
         const ctx = canvas.getContext("2d")!
 
-        ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, canvas.width, canvas.height)
+        ctx.drawImage(image, 0, 0, image.width, image.height)
 
         const map: SimulatorMap = { permeability: [], permittivity: [], shape: targetSize }
 
