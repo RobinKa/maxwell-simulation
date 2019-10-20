@@ -14,7 +14,7 @@ export function simulatorMapToImageUrl(simulatorMap: SimulatorMap): string {
 
     const ctx = canvas.getContext("2d")!
 
-    ctx.fillStyle = "black"
+    ctx.fillStyle = "rgb(1, 0, 1)"
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     ctx.fillStyle = "rgb(0, 255, 0)"
@@ -46,6 +46,9 @@ export function imageUrlToSimulatorMap(imageUrl: string, targetSize: [number, nu
     image.onload = e => {
         const ctx = canvas.getContext("2d")!
 
+        ctx.fillStyle = "rgb(1, 0, 1)"
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+
         ctx.drawImage(image, 0, 0, image.width, image.height)
 
         const map: SimulatorMap = { permeability: [], permittivity: [], shape: targetSize }
@@ -53,8 +56,8 @@ export function imageUrlToSimulatorMap(imageUrl: string, targetSize: [number, nu
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
         for (let x = 0; x < targetSize[0]; x++) {
             for (let y = 0; y < targetSize[1]; y++) {
-                map.permittivity[x + y * targetSize[0]] = imageData[x * 4 + y * targetSize[0] * 4 + 0]
-                map.permeability[x + y * targetSize[0]] = imageData[x * 4 + y * targetSize[0] * 4 + 2]
+                map.permittivity[x + y * targetSize[0]] = Math.max(1, imageData[x * 4 + y * targetSize[0] * 4 + 0])
+                map.permeability[x + y * targetSize[0]] = Math.max(1, imageData[x * 4 + y * targetSize[0] * 4 + 2])
             }
         }
 
