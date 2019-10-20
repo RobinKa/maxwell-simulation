@@ -104,20 +104,19 @@ export class FDTDSimulator implements Simulator {
             const gx = this.constants.gridSizeX as number
             const gy = this.constants.gridSizeY as number
             const gz = this.constants.gridSizeZ as number
-            const cellSize = this.constants.cellSize as number
+            const cs = this.constants.cellSize as number
 
             const x = getX(index, gx)
             const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
-            return getAt(magFieldX, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cellSize)) * (
+            return getAt(magFieldX, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cs)) * (
                 (getAt(fieldZ, gx, gy, gz, x, y + 1, z) - getAt(fieldZ, gx, gy, gz, x, y, z)))
         }, {
             output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
+            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
         }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false)
-
 
         this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], permeability: number[], magFieldY: number[], dt: number) {
             const index = Math.floor(this.thread.x)
@@ -125,14 +124,14 @@ export class FDTDSimulator implements Simulator {
             const gx = this.constants.gridSizeX as number
             const gy = this.constants.gridSizeY as number
             const gz = this.constants.gridSizeZ as number
-            const cellSize = this.constants.cellSize as number
+            const cs = this.constants.cellSize as number
 
             const x = getX(index, gx)
             const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
-            return getAt(magFieldY, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cellSize)) * (
+            return getAt(magFieldY, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cs)) * (
                 -(getAt(fieldZ, gx, gy, gz, x + 1, y, z) - getAt(fieldZ, gx, gy, gz, x, y, z)))
         }, {
             output: [cellCount],
@@ -145,14 +144,14 @@ export class FDTDSimulator implements Simulator {
             const gx = this.constants.gridSizeX as number
             const gy = this.constants.gridSizeY as number
             const gz = this.constants.gridSizeZ as number
-            const cellSize = this.constants.cellSize as number
+            const cs = this.constants.cellSize as number
 
             const x = getX(index, gx)
             const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_X Y - d_Y X
-            return getAt(magFieldZ, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cellSize)) * (
+            return getAt(magFieldZ, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cs)) * (
                 (getAt(fieldY, gx, gy, gz, x + 1, y, z) - getAt(fieldY, gx, gy, gz, x, y, z)) -
                 (getAt(fieldX, gx, gy, gz, x, y + 1, z) - getAt(fieldX, gx, gy, gz, x, y, z)))
         }, {
@@ -166,14 +165,14 @@ export class FDTDSimulator implements Simulator {
             const gx = this.constants.gridSizeX as number
             const gy = this.constants.gridSizeY as number
             const gz = this.constants.gridSizeZ as number
-            const cellSize = this.constants.cellSize as number
+            const cs = this.constants.cellSize as number
 
             const x = getX(index, gx)
             const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
-            return getAt(elFieldX, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cellSize)) * (
+            return getAt(elFieldX, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cs)) * (
                 (getAt(fieldZ, gx, gy, gz, x, y, z) - getAt(fieldZ, gx, gy, gz, x, y - 1, z)))
         }, {
             output: [cellCount],
@@ -186,14 +185,14 @@ export class FDTDSimulator implements Simulator {
             const gx = this.constants.gridSizeX as number
             const gy = this.constants.gridSizeY as number
             const gz = this.constants.gridSizeZ as number
-            const cellSize = this.constants.cellSize as number
+            const cs = this.constants.cellSize as number
 
             const x = getX(index, gx)
             const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
-            return getAt(elFieldY, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cellSize)) * (
+            return getAt(elFieldY, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cs)) * (
                 -(getAt(fieldZ, gx, gy, gz, x, y, z) - getAt(fieldZ, gx, gy, gz, x - 1, y, z)))
         }, {
             output: [cellCount],
@@ -206,14 +205,14 @@ export class FDTDSimulator implements Simulator {
             const gx = this.constants.gridSizeX as number
             const gy = this.constants.gridSizeY as number
             const gz = this.constants.gridSizeZ as number
-            const cellSize = this.constants.cellSize as number
+            const cs = this.constants.cellSize as number
 
             const x = getX(index, gx)
             const y = getY(index, gx, gy)
             const z = getZ(index, gx, gy, gz)
 
             // d_X Y - d_Y X
-            return getAt(elFieldZ, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cellSize)) * (
+            return getAt(elFieldZ, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cs)) * (
                 (getAt(fieldY, gx, gy, gz, x, y, z) - getAt(fieldY, gx, gy, gz, x - 1, y, z)) -
                 (getAt(fieldX, gx, gy, gz, x, y, z) - getAt(fieldX, gx, gy, gz, x, y - 1, z)))
         }, {
