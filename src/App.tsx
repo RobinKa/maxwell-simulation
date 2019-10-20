@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react'
 import { GPU, IKernelRunShortcut } from "gpu.js"
-import { FDTDSimulator, addScalarField3DValue, FlatScalarField3D, setScalarField3DValue } from "./simulator"
+import { FDTDSimulator } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
 const canvasAspect = canvasSize[0] / canvasSize[1]
@@ -12,7 +12,7 @@ const gridSize: [number, number, number] = canvasSize[0] >= canvasSize[1] ?
     [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest, 1]
 const cellSize = 0.04
 
-const simulator = new FDTDSimulator(gridSize, cellSize)
+let simulator: FDTDSimulator | null = null
 
 const makeRenderSimulatorCanvas = (g: GPU) => {
     function getAt(field: number[], shapeX: number, shapeY: number, shapeZ: number, x: number, y: number, z: number) {
@@ -146,7 +146,7 @@ function ControlWidget(props: ControlWidgerProps) {
                 </button>
                 {!collapsed && (
                     <div style={{ padding: "10px" }}>
-                        <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={0} max={100} step={1} />
+                        <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
                         <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
                         <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={5} step={0.5} />
                         <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
@@ -160,7 +160,7 @@ function ControlWidget(props: ControlWidgerProps) {
 }
 
 const defaultSignalBrushValue = 10
-const defaultSignalBrushSize = 0
+const defaultSignalBrushSize = 1
 const defaultMaterialBrushValue = 5
 const defaultMaterialBrushSize = 5
 
@@ -183,24 +183,20 @@ export default function () {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
     const simStep = useCallback(() => {
-        const simData = simulator.getData()
+        if (simulator) {
+            const simData = simulator.getData()
 
-        if (mouseDownPos.current !== null && drawCanvasRef.current) {
-            const centerX = clamp(0, simData.electricSourceFieldZ.shape[0] - 1, Math.floor(simData.electricSourceFieldZ.shape[0] * mouseDownPos.current[0] / drawCanvasRef.current.width))
-            const centerY = clamp(0, simData.electricSourceFieldZ.shape[1] - 1, Math.floor(simData.electricSourceFieldZ.shape[1] * mouseDownPos.current[1] / drawCanvasRef.current.height))
-            const brushHalfSize = Math.round(brushSize / 2)
+            if (mouseDownPos.current !== null && drawCanvasRef.current) {
+                const centerX = clamp(0, simData.electricSourceFieldZ.shape[0] - 1, Math.floor(simData.electricSourceFieldZ.shape[0] * mouseDownPos.current[0] / drawCanvasRef.current.width))
+                const centerY = clamp(0, simData.electricSourceFieldZ.shape[1] - 1, Math.floor(simData.electricSourceFieldZ.shape[1] * mouseDownPos.current[1] / drawCanvasRef.current.height))
+                const brushHalfSize = Math.round(brushSize / 2)
 
-            for (let x = Math.max(0, centerX - brushHalfSize); x <= Math.min(gridSize[0] - 1, centerX + brushHalfSize); x++) {
-                for (let y = Math.max(0, centerY - brushHalfSize); y <= Math.min(gridSize[1] - 1, centerY + brushHalfSize); y++) {
-                    for (let z = 0; z < simData.electricSourceFieldZ.shape[2]; z++) {
-                        addScalarField3DValue(simData.electricSourceFieldZ, x, y, z, -brushValue * 1000 * Math.cos(2 * Math.PI * signalFrequency * simData.time) * dt)
-                    }
-                }
+                simulator.injectSignal([centerX, centerY, 0], brushHalfSize, -brushValue * 1000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
             }
-        }
 
-        simulator.stepMagnetic(dt)
-        simulator.stepElectric(dt)
+            simulator.stepMagnetic(dt)
+            simulator.stepElectric(dt)
+        }
     }, [signalFrequency, brushValue, brushSize])
 
     useEffect(() => {
@@ -215,12 +211,14 @@ export default function () {
             const resolveDrawPromise = (resolve: (value?: unknown) => void) => requestAnimationFrame(resolve)
 
             while (!stop) {
-                const simData = simulator.getData()
+                if (simulator) {
+                    const simData = simulator.getData()
 
-                if (simData.time > 0 && renderSim.current !== null) {
-                    renderSim.current(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
-                        simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
-                        simData.permittivity.values, simData.permeability.values)
+                    if (simData.time > 0 && renderSim.current !== null) {
+                        renderSim.current(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
+                            simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
+                            simData.permittivity.values, simData.permeability.values)
+                    }
                 }
 
                 await new Promise(resolveDrawPromise)
@@ -234,7 +232,9 @@ export default function () {
 
     useEffect(() => {
         if (drawCanvasRef.current) {
-            renderSim.current = makeRenderSimulatorCanvas(new GPU({ mode: "webgl", canvas: drawCanvasRef.current }))
+            const gpu = new GPU({ mode: "webgl", canvas: drawCanvasRef.current })
+            renderSim.current = makeRenderSimulatorCanvas(gpu)
+            simulator = new FDTDSimulator(gpu, gridSize, cellSize)
         } else {
             throw new Error("Canvas ref was null")
         }
@@ -242,52 +242,68 @@ export default function () {
         startLoop()
     }, [startLoop])
 
-    const changeMaterial = useCallback((field: FlatScalarField3D, canvasPos: [number, number]) => {
-        const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
-        const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
-        const brushHalfSize = Math.round(brushSize / 2)
+    const changePermittivity = useCallback((canvasPos: [number, number]) => {
+        if (simulator) {
+            const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
+            const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
+            const brushHalfSize = Math.round(brushSize / 2)
 
-        for (let x = Math.max(0, centerX - brushHalfSize); x <= Math.min(gridSize[0] - 1, centerX + brushHalfSize); x++) {
-            for (let y = Math.max(0, centerY - brushHalfSize); y <= Math.min(gridSize[1] - 1, centerY + brushHalfSize); y++) {
-                setScalarField3DValue(field, x, y, 0, brushValue)
-            }
+            simulator.drawPermittivity([centerX, centerY, 0], brushHalfSize, brushValue)
+        }
+    }, [brushSize, brushValue])
+
+    const changePermeability = useCallback((canvasPos: [number, number]) => {
+        if (simulator) {
+            const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
+            const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
+            const brushHalfSize = Math.round(brushSize / 2)
+
+            simulator.drawPermeability([centerX, centerY, 0], brushHalfSize, brushValue)
         }
     }, [brushSize, brushValue])
 
     const resetMaterials = useCallback(() => {
-        simulator.resetMaterials()
+        if (simulator) {
+            simulator.resetMaterials()
+        }
     }, [])
 
     const resetFields = useCallback(() => {
-        simulator.resetFields()
-        signalStrength.current = 0
+        if (simulator) {
+            simulator.resetFields()
+            signalStrength.current = 0
+        }
     }, [])
 
     const onInputDown = useCallback(([clientX, clientY]: [number, number]) => {
-        if (clickOption === optionSignal) {
-            mouseDownPos.current = [clientX, clientY]
-        } else if (clickOption === optionPermittivityBrush) {
-            changeMaterial(simulator.getData().permittivity, [clientX, clientY])
-            setDrawingPermittivity(true)
-        } else if (clickOption === optionPermeabilityBrush) {
-            changeMaterial(simulator.getData().permeability, [clientX, clientY])
-            setDrawingPermeability(true)
+        if (simulator) {
+            if (clickOption === optionSignal) {
+                mouseDownPos.current = [clientX, clientY]
+            } else if (clickOption === optionPermittivityBrush) {
+                changePermittivity([clientX, clientY])
+                setDrawingPermittivity(true)
+            } else if (clickOption === optionPermeabilityBrush) {
+                changePermeability([clientX, clientY])
+                setDrawingPermeability(true)
+            }
         }
-    }, [changeMaterial, clickOption])
+    }, [changePermittivity, changePermeability, clickOption])
 
     const onInputMove = useCallback(([clientX, clientY]: [number, number]) => {
-        if (clickOption === optionSignal && mouseDownPos.current !== null) {
-            mouseDownPos.current = [clientX, clientY]
-        }
+        if (simulator) {
+            if (clickOption === optionSignal && mouseDownPos.current !== null) {
+                mouseDownPos.current = [clientX, clientY]
+            }
 
-        if (drawingPermittivity) {
-            changeMaterial(simulator.getData().permittivity, [clientX, clientY])
-        }
+            if (drawingPermittivity) {
+                changePermittivity([clientX, clientY])
+            }
 
-        if (drawingPermeability) {
-            changeMaterial(simulator.getData().permeability, [clientX, clientY])
+            if (drawingPermeability) {
+                changePermeability([clientX, clientY])
+            }
         }
-    }, [changeMaterial, clickOption, drawingPermeability, drawingPermittivity])
+    }, [changePermittivity, changePermeability, clickOption, drawingPermeability, drawingPermittivity])
 
     const onInputUp = useCallback(() => {
         if (clickOption === optionSignal) {
