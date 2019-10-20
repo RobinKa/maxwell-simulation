@@ -159,9 +159,14 @@ function ControlWidget(props: ControlWidgerProps) {
     )
 }
 
+const defaultSignalBrushValue = 10
+const defaultSignalBrushSize = 0
+const defaultMaterialBrushValue = 5
+const defaultMaterialBrushSize = 5
+
 export default function () {
-    const [brushSize, setBrushSize] = useState(5)
-    const [brushValue, setBrushValue] = useState(5)
+    const [brushSize, setBrushSize] = useState(defaultSignalBrushSize)
+    const [brushValue, setBrushValue] = useState(defaultSignalBrushValue)
     const [signalFrequency, setSignalFrequency] = useState(1)
     const [drawingPermeability, setDrawingPermeability] = useState(false)
     const [drawingPermittivity, setDrawingPermittivity] = useState(false)
@@ -181,17 +186,22 @@ export default function () {
         const simData = simulator.getData()
 
         if (mouseDownPos.current !== null && drawCanvasRef.current) {
-            const px = clamp(0, simData.electricSourceFieldZ.shape[0] - 1, Math.floor(simData.electricSourceFieldZ.shape[0] * mouseDownPos.current[0] / drawCanvasRef.current.width))
-            const py = clamp(0, simData.electricSourceFieldZ.shape[1] - 1, Math.floor(simData.electricSourceFieldZ.shape[1] * mouseDownPos.current[1] / drawCanvasRef.current.height))
+            const centerX = clamp(0, simData.electricSourceFieldZ.shape[0] - 1, Math.floor(simData.electricSourceFieldZ.shape[0] * mouseDownPos.current[0] / drawCanvasRef.current.width))
+            const centerY = clamp(0, simData.electricSourceFieldZ.shape[1] - 1, Math.floor(simData.electricSourceFieldZ.shape[1] * mouseDownPos.current[1] / drawCanvasRef.current.height))
+            const brushHalfSize = Math.round(brushSize / 2)
 
-            for (let z = 0; z < simData.electricSourceFieldZ.shape[2]; z++) {
-                addScalarField3DValue(simData.electricSourceFieldZ, px, py, z, -brushValue * 1000 * Math.cos(2 * Math.PI * signalFrequency * simData.time) * dt)
+            for (let x = Math.max(0, centerX - brushHalfSize); x <= Math.min(gridSize[0] - 1, centerX + brushHalfSize); x++) {
+                for (let y = Math.max(0, centerY - brushHalfSize); y <= Math.min(gridSize[1] - 1, centerY + brushHalfSize); y++) {
+                    for (let z = 0; z < simData.electricSourceFieldZ.shape[2]; z++) {
+                        addScalarField3DValue(simData.electricSourceFieldZ, x, y, z, -brushValue * 1000 * Math.cos(2 * Math.PI * signalFrequency * simData.time) * dt)
+                    }
+                }
             }
         }
 
         simulator.stepMagnetic(dt)
         simulator.stepElectric(dt)
-    }, [signalFrequency, brushValue])
+    }, [signalFrequency, brushValue, brushSize])
 
     useEffect(() => {
         const timer = setInterval(simStep, 1000 * dt)
@@ -289,6 +299,28 @@ export default function () {
         }
     }, [clickOption])
 
+    // Remember old brush values for signal and material
+    const [previousClickOption, setPreviousClickOption] = useState(optionSignal)
+    const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
+    const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
+    const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
+    const [materialBrushValue, setMaterialBrushValue] = useState(defaultMaterialBrushValue)
+    useEffect(() => {
+        if (clickOption === optionSignal && previousClickOption !== optionSignal) {
+            setMaterialBrushSize(brushSize)
+            setMaterialBrushValue(brushValue)
+            setBrushSize(signalBrushSize)
+            setBrushValue(signalBrushValue)
+        } else if (clickOption !== optionSignal && previousClickOption === optionSignal) {
+            setSignalBrushSize(brushSize)
+            setSignalBrushValue(brushValue)
+            setBrushSize(materialBrushSize)
+            setBrushValue(materialBrushValue)
+        }
+
+        setPreviousClickOption(clickOption)
+    }, [clickOption, previousClickOption, signalBrushSize, signalBrushValue, materialBrushSize, materialBrushValue, brushSize, brushValue])
+
     return (
         <div>
             <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", userSelect: "none" }}
@@ -305,7 +337,7 @@ export default function () {
                 <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
             </div>
 
-            {clickOption !== optionSignal && mousePosition &&
+            {mousePosition &&
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
