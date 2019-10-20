@@ -20,7 +20,7 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
             return 0
         }
 
-        return field[x + y * shapeX + z * shapeX * shapeZ]
+        return field[x + y * shapeX + z * shapeX * shapeY]
     }
 
     return g.createKernel(function (electricFieldX: number[], electricFieldY: number[], electricFieldZ: number[],
@@ -37,7 +37,10 @@ const makeRenderSimulatorCanvas = (g: GPU) => {
 
         const z = Math.floor(gz / 2)
 
-        const eAA = getAt(electricFieldX, gx, gy, gz, xa, ya, z) * getAt(electricFieldX, gx, gy, gz, xa, ya, z) + getAt(electricFieldY, gx, gy, gz, xa, ya, z) * getAt(electricFieldY, gx, gy, gz, xa, ya, z) + getAt(electricFieldZ, gx, gy, gz, xa, ya, z) * getAt(electricFieldZ, gx, gy, gz, xa, ya, z)
+        const eAA =
+            getAt(electricFieldX, gx, gy, gz, xa, ya, z) * getAt(electricFieldX, gx, gy, gz, xa, ya, z) +
+            getAt(electricFieldY, gx, gy, gz, xa, ya, z) * getAt(electricFieldY, gx, gy, gz, xa, ya, z) +
+            getAt(electricFieldZ, gx, gy, gz, xa, ya, z) * getAt(electricFieldZ, gx, gy, gz, xa, ya, z)
 
         // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
         const magXAA = (getAt(magneticFieldX, gx, gy, gz, xa, ya, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, ya - 1, z)) / 2
@@ -167,6 +170,8 @@ export default function () {
     const optionPermeabilityBrush = 1
     const optionSignal = 2
 
+    const [mousePosition, setMousePosition] = useState<[number, number] | null>(null)
+
     const signalPosition = useRef([0, 0])
     const signalStrength = useRef(0)
     const mouseDownPos = useRef<[number, number] | null>(null)
@@ -227,7 +232,7 @@ export default function () {
 
     useEffect(() => {
         if (drawCanvasRef.current) {
-            renderSim.current = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
+            renderSim.current = makeRenderSimulatorCanvas(new GPU({ mode: "webgl", canvas: drawCanvasRef.current }))
         } else {
             throw new Error("Canvas ref was null")
         }
@@ -294,9 +299,9 @@ export default function () {
 
     return (
         <div>
-            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute" }}
+            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", userSelect: "none" }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
-                onMouseMove={e => onInputMove([e.clientX, e.clientY])}
+                onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY]) }}
                 onMouseUp={e => onInputUp()}
                 onTouchStart={e => onInputDown([e.touches[0].clientX, e.touches[0].clientY])}
                 onTouchMove={e => onInputMove([e.touches[0].clientX, e.touches[0].clientY])}
@@ -307,6 +312,10 @@ export default function () {
             <div style={{ position: "absolute", bottom: 10, right: 10, userSelect: "none" }}>
                 <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
             </div>
+
+            {clickOption !== optionSignal && mousePosition &&
+                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
+            }
 
             <ControlWidget brushSize={brushSize} setBrushSize={setBrushSize}
                 brushValue={brushValue} setBrushValue={setBrushValue}
