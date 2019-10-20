@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react'
-import { GPU } from "gpu.js"
+import { GPU, IKernelRunShortcut } from "gpu.js"
 import { FDTDSimulator, addScalarField3DValue, FlatScalarField3D, setScalarField3DValue } from "./simulator"
 
 const canvasSize = [window.innerWidth, window.innerHeight]
@@ -156,11 +156,6 @@ function ControlWidget(props: ControlWidgerProps) {
     )
 }
 
-let renderSim: any = null
-let signalStrength = 0
-let signalPosition = [0, 0]
-let mouseDownPos: [number, number] | null = null
-
 export default function () {
     const [brushSize, setBrushSize] = useState(5)
     const [brushValue, setBrushValue] = useState(5)
@@ -172,24 +167,28 @@ export default function () {
     const optionPermeabilityBrush = 1
     const optionSignal = 2
 
+    const signalPosition = useRef([0, 0])
+    const signalStrength = useRef(0)
+    const mouseDownPos = useRef<[number, number] | null>(null)
+    const renderSim = useRef<IKernelRunShortcut | null>(null)
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
     const simStep = useCallback(() => {
         const simData = simulator.getData()
 
-        if (mouseDownPos !== null) {
-            signalPosition = mouseDownPos
-            signalStrength = Math.min(10000, signalStrength + dt * 10000)
+        if (mouseDownPos.current !== null) {
+            signalPosition.current = mouseDownPos.current
+            signalStrength.current = Math.min(10000, signalStrength.current + dt * 10000)
         }
 
-        signalStrength *= Math.pow(0.1, dt)
+        signalStrength.current *= Math.pow(0.1, dt)
 
-        if (signalStrength > 1 && drawCanvasRef.current) {
-            const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition[0] / drawCanvasRef.current.width))
-            const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition[1] / drawCanvasRef.current.height))
+        if (signalStrength.current > 1 && drawCanvasRef.current) {
+            const px = clamp(0, simData.electricFieldX.shape[0] - 1, Math.floor(simData.electricFieldX.shape[0] * signalPosition.current[0] / drawCanvasRef.current.width))
+            const py = clamp(0, simData.electricFieldX.shape[1] - 1, Math.floor(simData.electricFieldX.shape[1] * signalPosition.current[1] / drawCanvasRef.current.height))
 
             for (let z = 0; z < simData.electricFieldX.shape[2]; z++) {
-                addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength * dt)
+                addScalarField3DValue(simData.electricFieldZ, px, py, z, Math.sin(signalFrequency * 2 * Math.PI * simData.time) * signalStrength.current * dt)
             }
         }
 
@@ -211,8 +210,8 @@ export default function () {
             while (!stop) {
                 const simData = simulator.getData()
 
-                if (simData.time > 0 && renderSim !== null) {
-                    renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
+                if (simData.time > 0 && renderSim.current !== null) {
+                    renderSim.current(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
                         simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
                         simData.permittivity.values, simData.permeability.values)
                 }
@@ -228,7 +227,7 @@ export default function () {
 
     useEffect(() => {
         if (drawCanvasRef.current) {
-            renderSim = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
+            renderSim.current = makeRenderSimulatorCanvas(new GPU({ mode: "webgl2", canvas: drawCanvasRef.current }))
         } else {
             throw new Error("Canvas ref was null")
         }
@@ -254,12 +253,12 @@ export default function () {
 
     const resetFields = useCallback(() => {
         simulator.resetFields()
-        signalStrength = 0
+        signalStrength.current = 0
     }, [])
 
     const onInputDown = useCallback(([clientX, clientY]: [number, number]) => {
         if (clickOption === optionSignal) {
-            mouseDownPos = [clientX, clientY]
+            mouseDownPos.current = [clientX, clientY]
         } else if (clickOption === optionPermittivityBrush) {
             changeMaterial(simulator.getData().permittivity, [clientX, clientY])
             setDrawingPermittivity(true)
@@ -270,8 +269,8 @@ export default function () {
     }, [changeMaterial, clickOption])
 
     const onInputMove = useCallback(([clientX, clientY]: [number, number]) => {
-        if (clickOption === optionSignal && mouseDownPos !== null) {
-            mouseDownPos = [clientX, clientY]
+        if (clickOption === optionSignal && mouseDownPos.current !== null) {
+            mouseDownPos.current = [clientX, clientY]
         }
 
         if (drawingPermittivity) {
@@ -285,7 +284,7 @@ export default function () {
 
     const onInputUp = useCallback(([clientX, clientY]: [number, number]) => {
         if (clickOption === optionSignal) {
-            mouseDownPos = null
+            mouseDownPos.current = null
         } else if (clickOption === optionPermeabilityBrush) {
             setDrawingPermeability(false)
         } else if (clickOption === optionPermittivityBrush) {
