@@ -282,7 +282,7 @@ export default function () {
         }
     }, [changeMaterial, clickOption, drawingPermeability, drawingPermittivity])
 
-    const onInputUp = useCallback(([clientX, clientY]: [number, number]) => {
+    const onInputUp = useCallback(() => {
         if (clickOption === optionSignal) {
             mouseDownPos.current = null
         } else if (clickOption === optionPermeabilityBrush) {
@@ -297,10 +297,10 @@ export default function () {
             <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute" }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
                 onMouseMove={e => onInputMove([e.clientX, e.clientY])}
-                onMouseUp={e => onInputUp([e.clientX, e.clientY])}
+                onMouseUp={e => onInputUp()}
                 onTouchStart={e => onInputDown([e.touches[0].clientX, e.touches[0].clientY])}
                 onTouchMove={e => onInputMove([e.touches[0].clientX, e.touches[0].clientY])}
-                onTouchEnd={e => onInputUp([e.touches[0].clientX, e.touches[0].clientY])}
+                onTouchEnd={e => onInputUp()}
                 onContextMenu={e => e.preventDefault()}
             />
 
