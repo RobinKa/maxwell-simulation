@@ -32,14 +32,14 @@ export interface Simulator {
     getData: () => SimulationData
 }
 
-function memoKernelFunc(makeFunc: () => IKernelRunShortcut) {
-    const funcs: { [name: string]: IKernelRunShortcut } = {}
+function memoByName<T>(makeNew: () => T) {
+    const memoized: { [name: string]: T } = {}
 
     return (name: string) => {
-        if (!funcs[name]) {
-            funcs[name] = makeFunc()
+        if (!memoized[name]) {
+            memoized[name] = makeNew()
         }
-        return funcs[name]
+        return memoized[name]
     }
 }
 
@@ -64,11 +64,11 @@ export class FDTDSimulator implements Simulator {
     constructor(readonly gpu: GPU, readonly gridSize: [number, number, number], readonly cellSize: number) {
         const cellCount = gridSize[0] * gridSize[1] * gridSize[2]
 
-        this.makeFieldTexture = memoKernelFunc(() => this.gpu.createKernel(function (value: number) {
+        this.makeFieldTexture = memoByName(() => this.gpu.createKernel(function (value: number) {
             return value
         }).setOutput([cellCount]).setPipeline(true))
 
-        this.copyTexture = memoKernelFunc(() => this.gpu.createKernel(function (texture: number[]) {
+        this.copyTexture = memoByName(() => this.gpu.createKernel(function (texture: number[]) {
             return texture[this.thread.x]
         }).setOutput([cellCount]).setPipeline(true))
 
@@ -105,7 +105,7 @@ export class FDTDSimulator implements Simulator {
             return Math.floor(index / (shapeX * shapeY)) % shapeZ
         }
 
-        this.drawOnTexture = memoKernelFunc(() => this.gpu.createKernel(function (pos: number[], size: number, value: number, keep: number, texture: number[]) {
+        this.drawOnTexture = memoByName(() => this.gpu.createKernel(function (pos: number[], size: number, value: number, keep: number, texture: number[]) {
             const index = Math.floor(this.thread.x)
 
             const gx = this.constants.gridSizeX as number
@@ -346,6 +346,14 @@ export class FDTDSimulator implements Simulator {
 
     injectSignal = (pos: [number, number, number], size: number, value: number, dt: number) => {
         this.data.electricSourceFieldZ.values = this.drawOnTexture("esz")(pos, size, value * dt, 1, this.copyTexture("esz")(this.data.electricSourceFieldZ.values)) as Texture
+    }
+    
+    loadPermittivity = (permittivity: number[]) => {
+        this.data.permittivity.values = this.copyTexture("loadPermittivity")(permittivity) as Texture
+    }
+
+    loadPermeability = (permeability: number[]) => {
+        this.data.permeability.values = this.copyTexture("loadPermeability")(permeability) as Texture
     }
 
     getData = () => this.data

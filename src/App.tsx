@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react'
 import { GPU, IKernelRunShortcut } from "gpu.js"
 import { FDTDSimulator } from "./simulator"
+import { simulatorMapToImageUrl, imageUrlToSimulatorMap } from './util'
 
 const canvasSize = [window.innerWidth, window.innerHeight]
 const canvasAspect = canvasSize[0] / canvasSize[1]
@@ -137,6 +138,30 @@ type ControlWidgerProps = {
 
 function ControlWidget(props: ControlWidgerProps) {
     const [collapsed, setCollapsed] = useState(false)
+    const [simulatorMapUrl, setSimulatorMapUrl] = useState("")
+
+    const onSaveClicked = useCallback(() => {
+        if (simulator) {
+            const simData = simulator.getData()
+
+            window.open(simulatorMapToImageUrl({
+                permittivity: simData.permittivity.values.toArray() as number[],
+                permeability: simData.permeability.values.toArray() as number[],
+                shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
+            }))
+        }
+    }, [])
+
+    const onLoadClicked = useCallback(() => {
+        if (simulator) {
+            imageUrlToSimulatorMap(simulatorMapUrl, [gridSize[0], gridSize[1]], map => {
+                if (simulator) {
+                    simulator.loadPermeability(map.permeability)
+                    simulator.loadPermittivity(map.permittivity)
+                }
+            })
+        }
+    }, [simulatorMapUrl])
 
     return (
         <div style={{ userSelect: "none" }}>
@@ -146,12 +171,21 @@ function ControlWidget(props: ControlWidgerProps) {
                 </button>
                 {!collapsed && (
                     <div style={{ padding: "10px" }}>
+                        <div>
+                            <button onClick={onSaveClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Save map</button>
+                        </div>
+                        <div>
+                            <input type="text" onChange={e => setSimulatorMapUrl(e.target.value)} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }} />
+                            <button onClick={onLoadClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Load map url</button>
+                        </div>
                         <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
                         <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
                         <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={5} step={0.5} />
                         <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
-                        <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>
-                        <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset materials</button>
+                        <div>
+                            <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>
+                            <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset materials</button>
+                        </div>
                     </div>
                 )}
             </div>
