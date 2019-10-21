@@ -2,11 +2,7 @@ import { GPU, IKernelRunShortcut, Texture } from "gpu.js"
 
 export type FlatScalarField3D = {
     values: Texture
-    shape: [number, number, number]
-}
-
-export function indexToCoords(index: number, shape: [number, number, number]): [number, number, number] {
-    return [index % shape[0], Math.floor(index / shape[0]) % shape[1], Math.floor(index / (shape[0] * shape[1])) % shape[2]]
+    shape: [number, number]
 }
 
 export type SimulationData = {
@@ -61,16 +57,14 @@ export class FDTDSimulator implements Simulator {
 
     private drawOnTexture: (name: string) => IKernelRunShortcut
 
-    constructor(readonly gpu: GPU, readonly gridSize: [number, number, number], readonly cellSize: number) {
-        const cellCount = gridSize[0] * gridSize[1] * gridSize[2]
-
+    constructor(readonly gpu: GPU, readonly gridSize: [number, number], readonly cellSize: number) {
         this.makeFieldTexture = memoByName(() => this.gpu.createKernel(function (value: number) {
             return value
-        }).setOutput([cellCount]).setPipeline(true))
+        }).setOutput([gridSize[0], gridSize[1]]).setPipeline(true).setTactic("performance"))
 
-        this.copyTexture = memoByName(() => this.gpu.createKernel(function (texture: number[]) {
-            return texture[this.thread.x]
-        }).setOutput([cellCount]).setPipeline(true))
+        this.copyTexture = memoByName(() => this.gpu.createKernel(function (texture: number[][]) {
+            return texture[this.thread.y!][this.thread.x]
+        }).setOutput([gridSize[0], gridSize[1]]).setPipeline(true).setTactic("performance"))
 
         this.data = {
             time: 0,
@@ -85,202 +79,143 @@ export class FDTDSimulator implements Simulator {
             permeability: { values: this.makeFieldTexture("permeability")(1) as Texture, shape: gridSize },
         }
 
-        function getAt(field: number[], shapeX: number, shapeY: number, shapeZ: number, x: number, y: number, z: number) {
-            if (x < 0 || x >= shapeX || y < 0 || y >= shapeY || z < 0 || z >= shapeZ) {
+        function getAt(field: number[][], shapeX: number, shapeY: number, x: number, y: number) {
+            if (x < 0 || x >= shapeX || y < 0 || y >= shapeY) {
                 return 0
             }
 
-            return field[x + y * shapeX + z * shapeX * shapeY]
+            return field[y][x]
         }
 
-        function getX(index: number, shapeX: number) {
-            return index % shapeX
-        }
+        this.drawOnTexture = memoByName(() => this.gpu.createKernel(function (pos: number[], size: number, value: number, keep: number, texture: number[][]) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
 
-        function getY(index: number, shapeX: number, shapeY: number) {
-            return Math.floor(index / shapeX) % shapeY
-        }
+            const oldValue = getAt(texture, gx, gy, x, y)
 
-        function getZ(index: number, shapeX: number, shapeY: number, shapeZ: number) {
-            return Math.floor(index / (shapeX * shapeY)) % shapeZ
-        }
-
-        this.drawOnTexture = memoByName(() => this.gpu.createKernel(function (pos: number[], size: number, value: number, keep: number, texture: number[]) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
-
-            const oldValue = getAt(texture, gx, gy, gz, x, y, z)
-
-            const within = Math.max(Math.abs(pos[0] - x), Math.max(Math.abs(pos[1] - y), Math.abs(pos[2] - z))) < size
+            const within = Math.max(Math.abs(pos[0] - x), Math.abs(pos[1] - y)) < size
 
             return within ? value + keep * oldValue : oldValue
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true))
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance"))
 
-        this.injectSource = this.gpu.createKernel(function (source: number[], field: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
+        this.injectSource = this.gpu.createKernel(function (source: number[][], field: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
 
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
-
-            return getAt(field, gx, gy, gz, x, y, z) + getAt(source, gx, gy, gz, x, y, z) * dt
+            return getAt(field, gx, gy, x, y) + getAt(source, gx, gy, x, y) * dt
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.decaySource = this.gpu.createKernel(function (source: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
+        this.decaySource = this.gpu.createKernel(function (source: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
 
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
-
-            return getAt(source, gx, gy, gz, x, y, z) * Math.pow(0.1, dt)
+            return getAt(source, gx, gy, x, y) * Math.pow(0.1, dt)
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.updateMagneticX = this.gpu.createKernel(function (fieldY: number[], fieldZ: number[], permeability: number[], magFieldX: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
+        this.updateMagneticX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
             const cs = this.constants.cellSize as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
-            return getAt(magFieldX, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cs)) * (
-                (getAt(fieldZ, gx, gy, gz, x, y + 1, z) - getAt(fieldZ, gx, gy, gz, x, y, z)))
+            return getAt(magFieldX, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
+                (getAt(fieldZ, gx, gy, x, y + 1) - getAt(fieldZ, gx, gy, x, y)))
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], permeability: number[], magFieldY: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
+        this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
             const cs = this.constants.cellSize as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
-            return getAt(magFieldY, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cs)) * (
-                -(getAt(fieldZ, gx, gy, gz, x + 1, y, z) - getAt(fieldZ, gx, gy, gz, x, y, z)))
+            return getAt(magFieldY, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
+                -(getAt(fieldZ, gx, gy, x + 1, y) - getAt(fieldZ, gx, gy, x, y)))
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[], fieldY: number[], permeability: number[], magFieldZ: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
+        this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permeability: number[][], magFieldZ: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
             const cs = this.constants.cellSize as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
 
             // d_X Y - d_Y X
-            return getAt(magFieldZ, gx, gy, gz, x, y, z) - (dt / (getAt(permeability, gx, gy, gz, x, y, z) * cs)) * (
-                (getAt(fieldY, gx, gy, gz, x + 1, y, z) - getAt(fieldY, gx, gy, gz, x, y, z)) -
-                (getAt(fieldX, gx, gy, gz, x, y + 1, z) - getAt(fieldX, gx, gy, gz, x, y, z)))
+            return getAt(magFieldZ, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
+                (getAt(fieldY, gx, gy, x + 1, y) - getAt(fieldY, gx, gy, x, y)) -
+                (getAt(fieldX, gx, gy, x, y + 1) - getAt(fieldX, gx, gy, x, y)))
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.updateElectricX = this.gpu.createKernel(function (fieldY: number[], fieldZ: number[], permittivity: number[], elFieldX: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
+        this.updateElectricX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
             const cs = this.constants.cellSize as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
 
             // d_Y Z - d_Z Y
-            return getAt(elFieldX, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cs)) * (
-                (getAt(fieldZ, gx, gy, gz, x, y, z) - getAt(fieldZ, gx, gy, gz, x, y - 1, z)))
+            return getAt(elFieldX, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
+                (getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x, y - 1)))
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.updateElectricY = this.gpu.createKernel(function (fieldX: number[], fieldZ: number[], permittivity: number[], elFieldY: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
+        this.updateElectricY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
             const cs = this.constants.cellSize as number
-
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
 
             // d_Z X - d_X Z
-            return getAt(elFieldY, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cs)) * (
-                -(getAt(fieldZ, gx, gy, gz, x, y, z) - getAt(fieldZ, gx, gy, gz, x - 1, y, z)))
+            return getAt(elFieldY, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
+                -(getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x - 1, y)))
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
 
-        this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[], fieldY: number[], permittivity: number[], elFieldZ: number[], dt: number) {
-            const index = Math.floor(this.thread.x)
-
-            const gx = this.constants.gridSizeX as number
-            const gy = this.constants.gridSizeY as number
-            const gz = this.constants.gridSizeZ as number
+        this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permittivity: number[][], elFieldZ: number[][], dt: number) {
+            const x = this.thread.x as number
+            const y = this.thread.y! as number
+            const gx = this.output.x as number
+            const gy = this.output.y as number
             const cs = this.constants.cellSize as number
 
-            const x = getX(index, gx)
-            const y = getY(index, gx, gy)
-            const z = getZ(index, gx, gy, gz)
-
             // d_X Y - d_Y X
-            return getAt(elFieldZ, gx, gy, gz, x, y, z) + (dt / (getAt(permittivity, gx, gy, gz, x, y, z) * cs)) * (
-                (getAt(fieldY, gx, gy, gz, x, y, z) - getAt(fieldY, gx, gy, gz, x - 1, y, z)) -
-                (getAt(fieldX, gx, gy, gz, x, y, z) - getAt(fieldX, gx, gy, gz, x, y - 1, z)))
+            return getAt(elFieldZ, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
+                (getAt(fieldY, gx, gy, x, y) - getAt(fieldY, gx, gy, x - 1, y)) -
+                (getAt(fieldX, gx, gy, x, y) - getAt(fieldX, gx, gy, x, y - 1)))
         }, {
-            output: [cellCount],
-            constants: { cellSize: cellSize, gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] }
-        }).setFunctions([getX, getY, getZ, getAt]).setWarnVarUsage(false).setPipeline(true)
+            output: [gridSize[0], gridSize[1]],
+            constants: { cellSize: cellSize },
+        }).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance")
     }
 
     stepElectric = (dt: number) => {
@@ -348,11 +283,11 @@ export class FDTDSimulator implements Simulator {
         this.data.electricSourceFieldZ.values = this.drawOnTexture("esz")(pos, size, value * dt, 1, this.copyTexture("esz")(this.data.electricSourceFieldZ.values)) as Texture
     }
     
-    loadPermittivity = (permittivity: number[]) => {
+    loadPermittivity = (permittivity: number[][]) => {
         this.data.permittivity.values = this.copyTexture("loadPermittivity")(permittivity) as Texture
     }
 
-    loadPermeability = (permeability: number[]) => {
+    loadPermeability = (permeability: number[][]) => {
         this.data.permeability.values = this.copyTexture("loadPermeability")(permeability) as Texture
     }
 

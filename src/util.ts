@@ -1,6 +1,6 @@
 type SimulatorMap = {
-    permittivity: number[]
-    permeability: number[]
+    permittivity: number[][]
+    permeability: number[][]
     shape: [number, number]
 }
 
@@ -26,8 +26,8 @@ export function simulatorMapToImageUrl(simulatorMap: SimulatorMap): string {
 
     for (let x = 0; x < canvas.width; x++) {
         for (let y = 0; y < canvas.height; y++) {
-            canvasData.data[x * 4 + y * canvas.width * 4 + 0] = Math.round(permittivity[x + y * canvas.width]) // r
-            canvasData.data[x * 4 + y * canvas.width * 4 + 2] = Math.round(permeability[x + y * canvas.width]) // b
+            canvasData.data[x * 4 + y * canvas.width * 4 + 0] = Math.round(permittivity[y][x]) // r
+            canvasData.data[x * 4 + y * canvas.width * 4 + 2] = Math.round(permeability[y][x]) // b
             canvasData.data[x * 4 + y * canvas.width * 4 + 3] = 255 // a
         }
     }
@@ -54,10 +54,12 @@ export function imageUrlToSimulatorMap(imageUrl: string, targetSize: [number, nu
         const map: SimulatorMap = { permeability: [], permittivity: [], shape: targetSize }
 
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-        for (let x = 0; x < targetSize[0]; x++) {
-            for (let y = 0; y < targetSize[1]; y++) {
-                map.permittivity[x + y * targetSize[0]] = Math.max(1, imageData[x * 4 + y * targetSize[0] * 4 + 0])
-                map.permeability[x + y * targetSize[0]] = Math.max(1, imageData[x * 4 + y * targetSize[0] * 4 + 2])
+        for (let y = 0; y < targetSize[1]; y++) {
+            map.permittivity.push([])
+            map.permeability.push([])
+            for (let x = 0; x < targetSize[0]; x++) {
+                map.permittivity[y].push(Math.max(1, imageData[x * 4 + y * targetSize[0] * 4 + 0]))
+                map.permeability[y].push(Math.max(1, imageData[x * 4 + y * targetSize[0] * 4 + 2]))
             }
         }
 

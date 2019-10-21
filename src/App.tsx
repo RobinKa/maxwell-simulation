@@ -8,62 +8,60 @@ const canvasAspect = canvasSize[0] / canvasSize[1]
 
 const dt = 0.02
 const gridSizeLongest = 600
-const gridSize: [number, number, number] = canvasSize[0] >= canvasSize[1] ?
-    [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect), 1] :
-    [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest, 1]
+const gridSize: [number, number] = canvasSize[0] >= canvasSize[1] ?
+    [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect)] :
+    [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
 const cellSize = 0.04
 
 let simulator: FDTDSimulator | null = null
 
 const makeRenderSimulatorCanvas = (g: GPU) => {
-    function getAt(field: number[], shapeX: number, shapeY: number, shapeZ: number, x: number, y: number, z: number) {
-        if (x < 0 || x >= shapeX || y < 0 || y >= shapeY || z < 0 || z >= shapeZ) {
+    function getAt(field: number[][], shapeX: number, shapeY: number, x: number, y: number) {
+        if (x < 0 || x >= shapeX || y < 0 || y >= shapeY) {
             return 0
         }
 
-        return field[x + y * shapeX + z * shapeX * shapeY]
+        return field[y][x]
     }
 
-    return g.createKernel(function (electricFieldX: number[], electricFieldY: number[], electricFieldZ: number[],
-        magneticFieldX: number[], magneticFieldY: number[], magneticFieldZ: number[],
-        permittivity: number[], permeability: number[]) {
+    return g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
+        magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
+        permittivity: number[][], permeability: number[][]) {
         const gx = this.constants.gridSizeX as number
         const gy = this.constants.gridSizeY as number
-        const gz = this.constants.gridSizeZ as number
 
         const x = gx * this.thread.x! / (this.output.x as number)
         const y = gy * (1 - this.thread.y! / (this.output.y as number))
         const xa = Math.floor(x)
         const ya = Math.floor(y)
 
-        const z = Math.floor(gz / 2)
-
         const eAA =
-            getAt(electricFieldX, gx, gy, gz, xa, ya, z) * getAt(electricFieldX, gx, gy, gz, xa, ya, z) +
-            getAt(electricFieldY, gx, gy, gz, xa, ya, z) * getAt(electricFieldY, gx, gy, gz, xa, ya, z) +
-            getAt(electricFieldZ, gx, gy, gz, xa, ya, z) * getAt(electricFieldZ, gx, gy, gz, xa, ya, z)
+            getAt(electricFieldX, gx, gy, xa, ya) * getAt(electricFieldX, gx, gy, xa, ya) +
+            getAt(electricFieldY, gx, gy, xa, ya) * getAt(electricFieldY, gx, gy, xa, ya) +
+            getAt(electricFieldZ, gx, gy, xa, ya) * getAt(electricFieldZ, gx, gy, xa, ya)
 
         // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
-        const magXAA = (getAt(magneticFieldX, gx, gy, gz, xa, ya, z) + getAt(magneticFieldX, gx, gy, gz, xa - 1, ya - 1, z)) / 2
-        const magYAA = (getAt(magneticFieldY, gx, gy, gz, xa, ya, z) + getAt(magneticFieldY, gx, gy, gz, xa - 1, ya - 1, z)) / 2
-        const magZAA = (getAt(magneticFieldZ, gx, gy, gz, xa, ya, z) + getAt(magneticFieldZ, gx, gy, gz, xa - 1, ya - 1, z)) / 2
+        const magXAA = (getAt(magneticFieldX, gx, gy, xa, ya) + getAt(magneticFieldX, gx, gy, xa - 1, ya - 1)) / 2
+        const magYAA = (getAt(magneticFieldY, gx, gy, xa, ya) + getAt(magneticFieldY, gx, gy, xa - 1, ya - 1)) / 2
+        const magZAA = (getAt(magneticFieldZ, gx, gy, xa, ya) + getAt(magneticFieldZ, gx, gy, xa - 1, ya - 1)) / 2
 
         const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
 
         const scale = 15
 
-        const permittivityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permittivity, gx, gy, gz, xa, ya, z))) / 4))
-        const permeabilityValue = Math.max(0, Math.min(1, (1 + 0.4342944819 * Math.log(getAt(permeability, gx, gy, gz, xa, ya, z))) / 4))
+        // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
+        const permittivityValue = 0.3 + 0.7 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, xa, ya))) / 2))
+        const permeabilityValue = 0.3 + 0.7 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, xa, ya))) / 2))
 
         const backgroundX = (Math.abs(x % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(y % 1 - 0.5) < 0.25 ? 1 : 0)
         const backgroundY = 1 - backgroundX
 
-        this.color(eAA / scale + 0.5 * backgroundX * permittivityValue, eAA / scale + mAA / scale, mAA / scale + 0.5 * backgroundY * permeabilityValue)
+        this.color(Math.min(1, eAA / scale + 0.5 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.5 * backgroundY * permeabilityValue))
     }, {
         output: [canvasSize[0], canvasSize[1]],
-        constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1], gridSizeZ: gridSize[2] },
+        constants: { gridSizeX: gridSize[0], gridSizeY: gridSize[1] },
         graphical: true
-    }).setFunctions([getAt]).setWarnVarUsage(false)
+    }).setFunctions([getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned")
 }
 
 function clamp(min: number, max: number, value: number) {
@@ -145,8 +143,8 @@ function ControlWidget(props: ControlWidgerProps) {
             const simData = simulator.getData()
 
             window.open(simulatorMapToImageUrl({
-                permittivity: simData.permittivity.values.toArray() as number[],
-                permeability: simData.permeability.values.toArray() as number[],
+                permittivity: simData.permittivity.values.toArray() as number[][],
+                permeability: simData.permeability.values.toArray() as number[][],
                 shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
             }))
         }
