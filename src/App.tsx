@@ -11,8 +11,17 @@ const defaultSignalBrushSize = 1
 const defaultMaterialBrushValue = 5
 const defaultMaterialBrushSize = 5
 
+const initialGridSizeLongest = 600
 const initialCanvasSize: [number, number] = [window.innerWidth, window.innerHeight]
-const initialGridSize: [number, number] = [1, 1]
+const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
+
+function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]): [number, number] {
+    const canvasAspect = canvasSize[0] / canvasSize[1]
+
+    return canvasSize[0] >= canvasSize[1] ?
+        [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect)] :
+        [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
+}
 
 const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
     function getAt(field: number[][], shapeX: number, shapeY: number, x: number, y: number) {
@@ -199,7 +208,7 @@ export default function () {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
     const [canvasSize, setCanvasSize] = useState<[number, number]>(initialCanvasSize)
-    const [gridSizeLongest, setGridSizeLongest] = useState(600)
+    const [gridSizeLongest, setGridSizeLongest] = useState(initialGridSizeLongest)
 
     useEffect(() => {
         const adjustCanvasSize = () => setCanvasSize([window.innerWidth, window.innerHeight])
@@ -208,19 +217,16 @@ export default function () {
         return () => window.removeEventListener("resize", adjustCanvasSize)
     }, [])
 
-    const gridSize = useMemo<[number, number]>(() => {
-        const canvasAspect = canvasSize[0] / canvasSize[1]
+    const gridSize = useMemo<[number, number]>(() => calculateGridSize(gridSizeLongest, canvasSize), [canvasSize, gridSizeLongest])
 
-        return canvasSize[0] >= canvasSize[1] ?
-            [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect)] :
-            [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
-    }, [canvasSize, gridSizeLongest])
+    // Would use useMemo for gpu here, but useMemo does not seem to work with ref dependencies.
+    const [gpu, setGpu] = useState<GPU | null>(null)
+    useEffect(() => {
+        if (drawCanvasRef.current) {
+            setGpu(new GPU({ mode: "webgl", canvas: drawCanvasRef.current }))
+        }
+    }, [drawCanvasRef])
 
-    // This line gives a warning because react does not know when .current changes. All we need is for the .current value to be populated
-    // before this memo is executed which this achieves. useMemo with ref as dependency does not work as expected (.current will be null) even
-    // though this does work using useEffect.
-    // eslint-disable-next-line
-    const gpu = useMemo(() => drawCanvasRef.current ? new GPU({ mode: "webgl", canvas: drawCanvasRef.current }) : null, [drawCanvasRef.current])
     const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, cellSize) : null, [gpu])
     const renderSim = useMemo(() => gpu ? makeRenderSimulatorCanvas(gpu, initialGridSize) : null, [gpu])
 
@@ -251,11 +257,6 @@ export default function () {
 
     const simStep = useCallback(() => {
         if (simulator) {
-            if (drawCanvasRef.current) {
-                drawCanvasRef.current.width = window.innerWidth
-                drawCanvasRef.current.height = window.innerHeight
-            }
-
             const simData = simulator.getData()
 
             if (mouseDownPos.current !== null) {
@@ -269,7 +270,7 @@ export default function () {
             simulator.stepMagnetic(dt)
             simulator.stepElectric(dt)
         }
-    }, [simulator, canvasSize, gridSize, signalFrequency, brushValue, brushSize, drawCanvasRef])
+    }, [simulator, canvasSize, gridSize, signalFrequency, brushValue, brushSize])
 
     useEffect(() => {
         const timer = setInterval(simStep, 1000 * dt)
@@ -278,6 +279,11 @@ export default function () {
 
     const drawStep = useCallback(() => {
         if (simulator && renderSim) {
+            if (drawCanvasRef.current) {
+                drawCanvasRef.current.width = window.innerWidth
+                drawCanvasRef.current.height = window.innerHeight
+            }
+
             const simData = simulator.getData()
 
             if (simData.time > 0) {
@@ -286,7 +292,7 @@ export default function () {
                     simData.permittivity.values, simData.permeability.values, gridSize)
             }
         }
-    }, [simulator, renderSim, gridSize])
+    }, [simulator, renderSim, gridSize, drawCanvasRef])
 
     useEffect(() => {
         let stop = false
