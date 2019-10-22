@@ -306,7 +306,7 @@ export default function () {
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
-            <CollapsibleContainer title="Menu" style={{ position: "absolute", opacity: 0.8, maxHeight: canvasSize[1], overflowY: "auto" }}>
+            <CollapsibleContainer title="Menu" style={{ position: "absolute", opacity: 0.8, maxHeight: canvasSize[1], overflowY: "auto" }} buttonStyle={{background: "rgb(60, 60, 60)"}}>
                 <CollapsibleContainer title="Save / Load">
                     <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
                 </CollapsibleContainer>

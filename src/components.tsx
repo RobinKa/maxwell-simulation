@@ -5,6 +5,7 @@ import { FDTDSimulator } from "./simulator"
 export type CollapsibleContainerProps = {
     children: ReactElement<any> | ReactElement<any>[] | null
     style?: React.CSSProperties
+    buttonStyle?: React.CSSProperties
     title?: string
 }
 
@@ -12,8 +13,8 @@ export function CollapsibleContainer(props: CollapsibleContainerProps) {
     const [collapsed, setCollapsed] = useState(false)
 
     return (
-        <div style={{ textAlign: "center", background: "rgba(33, 33, 33, 100)", fontWeight: "lighter", color: "white", ...props.style }}>
-            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "100%", height: "24px", background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", fontWeight: "bold", cursor: "pointer" }}>
+        <div style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", ...props.style }}>
+            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "100%", height: "24px", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", cursor: "pointer", ...props.buttonStyle }}>
                 {props.title ? `${props.title} ` : ""}[{collapsed ? "+" : "-"}]
             </button>
             {!collapsed && props.children}
