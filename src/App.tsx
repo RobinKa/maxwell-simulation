@@ -275,9 +275,11 @@ export default function () {
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
                 onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY]) }}
                 onMouseUp={e => onInputUp()}
+                onMouseLeave={e => onInputUp()}
                 onTouchStart={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputDown([e.touches[0].clientX, e.touches[0].clientY]) }}
                 onTouchMove={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputMove([e.touches[0].clientX, e.touches[0].clientY]) }}
                 onTouchEnd={e => { setMousePosition(null); onInputUp() }}
+                onTouchCancel={e => { setMousePosition(null); onInputUp() }}
                 onContextMenu={e => e.preventDefault()}
             />
 
