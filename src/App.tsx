@@ -145,7 +145,7 @@ export default function () {
                 const centerY = clamp(0, gridSize[1] - 1, Math.floor(gridSize[1] * mouseDownPos.current[1] / canvasSize[1]))
                 const brushHalfSize = Math.round(brushSize / 2)
 
-                simulator.injectSignal([centerX, centerY], brushHalfSize, -brushValue * 1000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
+                simulator.injectSignal([centerX, centerY], brushHalfSize, -brushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
             }
 
             simulator.stepMagnetic(dt)
