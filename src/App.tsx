@@ -100,21 +100,24 @@ export default function () {
     const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, initialCellSize) : null, [gpu])
     const renderSim = useMemo(() => gpu ? makeRenderSimulatorCanvas(gpu, initialGridSize) : null, [gpu])
 
+    // Update render sim output size
     useEffect(() => {
         if (renderSim) {
             renderSim.setOutput(canvasSize)
         }
+    }, [renderSim, canvasSize])
 
+    // Update simulator grid size
+    useEffect(() => {
         if (simulator) {
             simulator.setGridSize(gridSize)
         }
-    }, [renderSim, simulator, canvasSize, gridSize])
+    }, [simulator, gridSize])
 
+    // Update simulator cell size
     useEffect(() => {
         if (simulator) {
             simulator.setCellSize(cellSize)
-            simulator.resetFields()
-            simulator.resetMaterials()
         }
     }, [simulator, cellSize])
 
