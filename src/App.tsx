@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { GPU } from "gpu.js"
 import { FDTDSimulator } from "./simulator"
-import { simulatorMapToImageUrl, imageUrlToSimulatorMap } from './util'
+import { CollapsibleContainer, ControlComponent, SaveLoadComponent } from './components'
 
 const dt = 0.02
 const cellSize = 0.04
@@ -68,140 +68,6 @@ const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
 
 function clamp(min: number, max: number, value: number) {
     return Math.max(min, Math.min(max, value))
-}
-
-type LabeledSliderProps = {
-    label: string
-    value: number,
-    setValue: (value: number) => void
-    min: number
-    max: number
-    step: number
-}
-
-function LabeledSlider(props: LabeledSliderProps) {
-    return (
-        <div>
-            <label>{props.label}</label>
-            <div>
-                <input type="range" min={props.min} max={props.max} value={props.value} step={props.step}
-                    onChange={e => props.setValue(parseFloat(e.target.value))} style={{ height: 10, width: "100%" }} />
-                <div style={{ textAlign: "center", lineHeight: 0.1, marginBottom: "7px" }}>
-                    {props.value}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-type OptionSelectorProps = {
-    options: string[]
-    selectedOption: number
-    setSelectedOption: (selectedOption: number) => void
-}
-
-function OptionSelector(props: OptionSelectorProps) {
-    return (
-        <div>
-            {props.options.map((option, optionIndex) =>
-                <button key={option} style={{
-                    boxSizing: "border-box",
-                    border: optionIndex === props.selectedOption ? "4px solid rgb(0, 150, 255)" : "0",
-                    height: "30px",
-                    margin: "5px",
-                    width: `${100 / props.options.length}%`, background: "rgb(100, 100, 100)", color: "white"
-                }}
-                    onClick={e => props.setSelectedOption(optionIndex)}>
-                    {option}
-                </button>
-            )}
-        </div>
-    )
-}
-
-type ControlWidgerProps = {
-    simulator: FDTDSimulator | null
-
-    gridSize: [number, number]
-
-    gridSizeLongest: number
-    setGridSizeLongest: (gridSizeLongest: number) => void
-
-    brushSize: number,
-    setBrushSize: (brushSize: number) => void
-
-    brushValue: number
-    setBrushValue: (brushValue: number) => void
-
-    signalFrequency: number,
-    setSignalFrequency: (signalFrequency: number) => void
-
-    clickOption: number
-    setClickOption: (clickOption: number) => void
-
-    resetFields: () => void
-    resetMaterials: () => void
-}
-
-function ControlWidget(props: ControlWidgerProps) {
-    const [collapsed, setCollapsed] = useState(false)
-    const [simulatorMapUrl, setSimulatorMapUrl] = useState("")
-
-    const simulator = props.simulator
-    const gridSize = props.gridSize
-
-    const onSaveClicked = useCallback(() => {
-        if (simulator) {
-            const simData = simulator.getData()
-
-            window.open(simulatorMapToImageUrl({
-                permittivity: simData.permittivity.values.toArray() as number[][],
-                permeability: simData.permeability.values.toArray() as number[][],
-                shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
-            }))
-        }
-    }, [simulator])
-
-    const onLoadClicked = useCallback(() => {
-        if (simulator) {
-            imageUrlToSimulatorMap(simulatorMapUrl, [gridSize[0], gridSize[1]], map => {
-                if (simulator) {
-                    simulator.loadPermeability(map.permeability)
-                    simulator.loadPermittivity(map.permittivity)
-                }
-            })
-        }
-    }, [simulator, gridSize, simulatorMapUrl])
-
-    return (
-        <div style={{ userSelect: "none" }}>
-            <div style={{ textAlign: "center", position: "absolute", opacity: 0.8, background: "rgba(33, 33, 33, 100)", fontWeight: "lighter", color: "white" }}>
-                <button onClick={e => setCollapsed(!collapsed)} style={{ width: "100%", height: "30px", background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", fontWeight: "bold", cursor: "pointer" }}>
-                    Controls [{collapsed ? "+" : "-"}]
-                </button>
-                {!collapsed && (
-                    <div style={{ padding: "10px" }}>
-                        <div>
-                            <button onClick={onSaveClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Save map</button>
-                        </div>
-                        <div>
-                            <input type="text" onChange={e => setSimulatorMapUrl(e.target.value)} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }} />
-                            <button onClick={onLoadClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Load map url</button>
-                        </div>
-                        <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
-                        <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
-                        <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
-                        <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={5} step={0.5} />
-                        <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
-                        <div>
-                            <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>
-                            <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset materials</button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
 }
 
 export default function () {
@@ -404,8 +270,8 @@ export default function () {
     }, [clickOption, previousClickOption, signalBrushSize, signalBrushValue, materialBrushSize, materialBrushValue, brushSize, brushValue])
 
     return (
-        <div style={{ touchAction: "none" }}>
-            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", userSelect: "none", top: 0, left: 0, width: canvasSize[0], height: canvasSize[1] }}
+        <div style={{ touchAction: "none", userSelect: "none" }}>
+            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: canvasSize[0], height: canvasSize[1] }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
                 onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY]) }}
                 onMouseUp={e => onInputUp()}
@@ -415,7 +281,7 @@ export default function () {
                 onContextMenu={e => e.preventDefault()}
             />
 
-            <div style={{ position: "absolute", bottom: 10, right: 10, userSelect: "none" }}>
+            <div style={{ position: "absolute", bottom: 10, right: 10 }}>
                 <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
             </div>
 
@@ -423,14 +289,20 @@ export default function () {
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
-            <ControlWidget simulator={simulator} gridSize={gridSize}
-                gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                brushSize={brushSize} setBrushSize={setBrushSize}
-                brushValue={brushValue} setBrushValue={setBrushValue}
-                signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
-                clickOption={clickOption} setClickOption={setClickOption}
-                resetFields={resetFields} resetMaterials={resetMaterials}
-            />
+            <CollapsibleContainer title="Controls" style={{ position: "absolute", opacity: 0.8, maxHeight: canvasSize[1], overflowY: "auto" }}>
+                <CollapsibleContainer title="Save / Load">
+                    <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
+                </CollapsibleContainer>
+                <CollapsibleContainer title="Settings">
+                    <ControlComponent
+                        gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                        brushSize={brushSize} setBrushSize={setBrushSize}
+                        brushValue={brushValue} setBrushValue={setBrushValue}
+                        signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
+                        clickOption={clickOption} setClickOption={setClickOption}
+                        resetFields={resetFields} resetMaterials={resetMaterials} />
+                </CollapsibleContainer>
+            </CollapsibleContainer>
         </div>
     )
 }
