@@ -280,9 +280,24 @@ export class FDTDSimulator implements Simulator {
     }
 
     injectSignal = (pos: [number, number, number], size: number, value: number, dt: number) => {
-        this.data.electricSourceFieldZ.values = this.drawOnTexture("esz")(pos, size, value * dt, 1, this.copyTexture("esz")(this.data.electricSourceFieldZ.values)) as Texture
+        const t = this.getData().time
+        
+        // lambda = c / f, c = 1
+        const frequency = 2
+        const waveLength = Math.round(1 / (this.cellSize * frequency))
+
+        const sourceLength = 4 * waveLength
+
+        for (let dx = 0; dx <= sourceLength; dx++) {
+            const p = [pos[0] + dx, pos[1]]
+            const v = Math.exp(-Math.pow((dx - sourceLength / 2) / (waveLength / 2), 2)) * 5000 * Math.sin(2 * Math.PI * frequency * (t + dx * this.cellSize)) * dt
+
+            // Create two waves with opposite polarization going in the same direction.
+            // Magnetic parts cancel out leaving only the electric part.
+            this.data.electricSourceFieldZ.values = this.drawOnTexture("esz")(p, size, 2 * v, 1, this.copyTexture("esz")(this.data.electricSourceFieldZ.values)) as Texture
+        }
     }
-    
+
     loadPermittivity = (permittivity: number[][]) => {
         this.data.permittivity.values = this.copyTexture("loadPermittivity")(permittivity) as Texture
     }
