@@ -116,10 +116,32 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
     )
 }
 
-export type ControlComponentProps = {
+export type SettingsComponentProps = {
     gridSizeLongest: number
     setGridSizeLongest: (gridSizeLongest: number) => void
 
+    dt: number
+    setDt: (dt: number) => void
+
+    cellSize: number
+    setCellSize: (cellSize: number) => void
+
+    simulationSpeed: number
+    setSimulationSpeed: (simulationSpeed: number) => void
+}
+
+export function SettingsComponent(props: SettingsComponentProps) {
+    return (
+        <div style={{ padding: "10px" }}>
+            <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
+            <LabeledSlider label="Time step size" value={props.dt} setValue={props.setDt} min={0.001} max={0.1} step={0.001} />
+            <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.001} max={1} step={0.001} />
+            <LabeledSlider label="Simulation speed" value={props.simulationSpeed} setValue={props.setSimulationSpeed} min={0.1} max={10} step={0.1} />
+        </div>
+    )
+}
+
+export type ControlComponentProps = {
     brushSize: number,
     setBrushSize: (brushSize: number) => void
 
@@ -139,10 +161,9 @@ export type ControlComponentProps = {
 export function ControlComponent(props: ControlComponentProps) {
     return (
         <div style={{ padding: "10px" }}>
-            <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
             <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
             <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
-            <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={5} step={0.5} />
+            <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>
                 <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>

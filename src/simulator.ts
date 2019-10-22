@@ -57,7 +57,7 @@ export class FDTDSimulator implements Simulator {
 
     private drawOnTexture: (name: string) => IKernelRunShortcut
 
-    constructor(readonly gpu: GPU, gridSize: [number, number], readonly cellSize: number) {
+    constructor(readonly gpu: GPU, gridSize: [number, number], private cellSize: number) {
         this.makeFieldTexture = memoByName(() => this.gpu.createKernel(function (value: number) {
             return value
         }).setOutput(gridSize).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true))
@@ -120,12 +120,11 @@ export class FDTDSimulator implements Simulator {
             return getAt(source, gx, gy, x, y) * Math.pow(0.1, dt)
         }).setOutput(gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
 
-        this.updateMagneticX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number) {
+        this.updateMagneticX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
             const y = this.thread.y! as number
             const gx = this.output.x as number
             const gy = this.output.y as number
-            const cs = this.constants.cellSize as number
 
             // d_Y Z - d_Z Y
             return getAt(magFieldX, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
@@ -134,12 +133,11 @@ export class FDTDSimulator implements Simulator {
             constants: { cellSize: cellSize },
         }).setOutput(gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
 
-        this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number) {
+        this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
             const y = this.thread.y! as number
             const gx = this.output.x as number
             const gy = this.output.y as number
-            const cs = this.constants.cellSize as number
 
             // d_Z X - d_X Z
             return getAt(magFieldY, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
@@ -148,12 +146,11 @@ export class FDTDSimulator implements Simulator {
             constants: { cellSize: cellSize },
         }).setOutput(gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
 
-        this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permeability: number[][], magFieldZ: number[][], dt: number) {
+        this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permeability: number[][], magFieldZ: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
             const y = this.thread.y! as number
             const gx = this.output.x as number
             const gy = this.output.y as number
-            const cs = this.constants.cellSize as number
 
             // d_X Y - d_Y X
             return getAt(magFieldZ, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
@@ -163,12 +160,11 @@ export class FDTDSimulator implements Simulator {
             constants: { cellSize: cellSize },
         }).setOutput(gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
 
-        this.updateElectricX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number) {
+        this.updateElectricX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
             const y = this.thread.y! as number
             const gx = this.output.x as number
             const gy = this.output.y as number
-            const cs = this.constants.cellSize as number
 
             // d_Y Z - d_Z Y
             return getAt(elFieldX, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
@@ -177,12 +173,11 @@ export class FDTDSimulator implements Simulator {
             constants: { cellSize: cellSize },
         }).setOutput(gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
 
-        this.updateElectricY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number) {
+        this.updateElectricY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
             const y = this.thread.y! as number
             const gx = this.output.x as number
             const gy = this.output.y as number
-            const cs = this.constants.cellSize as number
 
             // d_Z X - d_X Z
             return getAt(elFieldY, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
@@ -191,12 +186,11 @@ export class FDTDSimulator implements Simulator {
             constants: { cellSize: cellSize },
         }).setOutput(gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
 
-        this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permittivity: number[][], elFieldZ: number[][], dt: number) {
+        this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permittivity: number[][], elFieldZ: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
             const y = this.thread.y! as number
             const gx = this.output.x as number
             const gy = this.output.y as number
-            const cs = this.constants.cellSize as number
 
             // d_X Y - d_Y X
             return getAt(elFieldZ, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
@@ -247,6 +241,12 @@ export class FDTDSimulator implements Simulator {
         this.resetMaterials()
     }
 
+    setCellSize = (cellSize: number) => {
+        this.cellSize = cellSize
+        this.resetFields()
+        this.resetMaterials()
+    }
+
     stepElectric = (dt: number) => {
         const elX = this.data.electricFieldX.values
         const elY = this.data.electricFieldY.values
@@ -260,9 +260,9 @@ export class FDTDSimulator implements Simulator {
         this.data.electricSourceFieldZ.values = this.decaySource(this.copyTexture("esz")(this.data.electricSourceFieldZ.values), dt) as Texture
 
         // d/dt E(x, t) = (curl B(x, t))/(µε)
-        this.data.electricFieldX.values = this.updateElectricX(magY, magZ, perm, this.copyTexture("ex")(elX), dt) as Texture
-        this.data.electricFieldY.values = this.updateElectricY(magX, magZ, perm, this.copyTexture("ey")(elY), dt) as Texture
-        this.data.electricFieldZ.values = this.updateElectricZ(magX, magY, perm, injectedElZ, dt) as Texture
+        this.data.electricFieldX.values = this.updateElectricX(magY, magZ, perm, this.copyTexture("ex")(elX), dt, this.cellSize) as Texture
+        this.data.electricFieldY.values = this.updateElectricY(magX, magZ, perm, this.copyTexture("ey")(elY), dt, this.cellSize) as Texture
+        this.data.electricFieldZ.values = this.updateElectricZ(magX, magY, perm, injectedElZ, dt, this.cellSize) as Texture
 
         this.data.time += dt / 2
     }
@@ -277,9 +277,9 @@ export class FDTDSimulator implements Simulator {
         const perm = this.data.permeability.values
 
         // d/dt B(x, t) = -curl E(x, t)
-        this.data.magneticFieldX.values = this.updateMagneticX(elY, elZ, perm, this.copyTexture("mx")(magX), dt) as Texture
-        this.data.magneticFieldY.values = this.updateMagneticY(elX, elZ, perm, this.copyTexture("my")(magY), dt) as Texture
-        this.data.magneticFieldZ.values = this.updateMagneticZ(elX, elY, perm, this.copyTexture("mz")(magZ), dt) as Texture
+        this.data.magneticFieldX.values = this.updateMagneticX(elY, elZ, perm, this.copyTexture("mx")(magX), dt, this.cellSize) as Texture
+        this.data.magneticFieldY.values = this.updateMagneticY(elX, elZ, perm, this.copyTexture("my")(magY), dt, this.cellSize) as Texture
+        this.data.magneticFieldZ.values = this.updateMagneticZ(elX, elY, perm, this.copyTexture("mz")(magZ), dt, this.cellSize) as Texture
 
         this.data.time += dt / 2
     }

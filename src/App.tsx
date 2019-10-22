@@ -1,16 +1,17 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { GPU } from "gpu.js"
 import { FDTDSimulator } from "./simulator"
-import { CollapsibleContainer, ControlComponent, SaveLoadComponent } from './components'
+import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent } from './components'
 
-const dt = 0.02
-const cellSize = 0.04
 
 const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
 const defaultMaterialBrushValue = 5
 const defaultMaterialBrushSize = 5
 
+const initialDt = 0.02
+const initialCellSize = 0.04
+const initialSimulationSpeed = 1
 const initialGridSizeLongest = 600
 const initialCanvasSize: [number, number] = [window.innerWidth, window.innerHeight]
 const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
@@ -75,6 +76,9 @@ export default function () {
 
     const [canvasSize, setCanvasSize] = useState<[number, number]>(initialCanvasSize)
     const [gridSizeLongest, setGridSizeLongest] = useState(initialGridSizeLongest)
+    const [dt, setDt] = useState(initialDt)
+    const [cellSize, setCellSize] = useState(initialCellSize)
+    const [simulationSpeed, setSimulationSpeed] = useState(initialSimulationSpeed)
 
     useEffect(() => {
         const adjustCanvasSize = () => setCanvasSize([window.innerWidth, window.innerHeight])
@@ -93,7 +97,7 @@ export default function () {
         }
     }, [drawCanvasRef])
 
-    const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, cellSize) : null, [gpu])
+    const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, initialCellSize) : null, [gpu])
     const renderSim = useMemo(() => gpu ? makeRenderSimulatorCanvas(gpu, initialGridSize) : null, [gpu])
 
     useEffect(() => {
@@ -105,6 +109,14 @@ export default function () {
             simulator.setGridSize(gridSize)
         }
     }, [renderSim, simulator, canvasSize, gridSize])
+
+    useEffect(() => {
+        if (simulator) {
+            simulator.setCellSize(cellSize)
+            simulator.resetFields()
+            simulator.resetMaterials()
+        }
+    }, [simulator, cellSize])
 
     const [brushSize, setBrushSize] = useState(defaultSignalBrushSize)
     const [brushValue, setBrushValue] = useState(defaultSignalBrushValue)
@@ -136,12 +148,12 @@ export default function () {
             simulator.stepMagnetic(dt)
             simulator.stepElectric(dt)
         }
-    }, [simulator, canvasSize, gridSize, signalFrequency, brushValue, brushSize])
+    }, [simulator, canvasSize, gridSize, dt, signalFrequency, brushValue, brushSize])
 
     useEffect(() => {
-        const timer = setInterval(simStep, 1000 * dt)
+        const timer = setInterval(simStep, 1000 / simulationSpeed * dt)
         return () => clearInterval(timer)
-    }, [simStep])
+    }, [simStep, dt, simulationSpeed])
 
     const drawStep = useCallback(() => {
         if (simulator && renderSim) {
@@ -291,13 +303,19 @@ export default function () {
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
-            <CollapsibleContainer title="Controls" style={{ position: "absolute", opacity: 0.8, maxHeight: canvasSize[1], overflowY: "auto" }}>
+            <CollapsibleContainer title="Menu" style={{ position: "absolute", opacity: 0.8, maxHeight: canvasSize[1], overflowY: "auto" }}>
                 <CollapsibleContainer title="Save / Load">
                     <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Settings">
-                    <ControlComponent
+                    <SettingsComponent
                         gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                        simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                        cellSize={cellSize} setCellSize={setCellSize}
+                        dt={dt} setDt={setDt} />
+                </CollapsibleContainer>
+                <CollapsibleContainer title="Controls">
+                    <ControlComponent
                         brushSize={brushSize} setBrushSize={setBrushSize}
                         brushValue={brushValue} setBrushValue={setBrushValue}
                         signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
