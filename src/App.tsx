@@ -2,17 +2,19 @@ import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { GPU } from "gpu.js"
 import { FDTDSimulator } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent } from './components'
+import { toggleFullScreen } from './util'
+import Fullscreen from "./icons/fullscreen.png"
 
-
-const defaultSignalBrushValue = 10
+const defaultSignalBrushValue = 20
 const defaultSignalBrushSize = 1
+const defaultSignalFrequency = 3
 const defaultMaterialBrushValue = 5
 const defaultMaterialBrushSize = 5
 
 const initialDt = 0.02
-const initialCellSize = 0.04
+const initialCellSize = 0.03
 const initialSimulationSpeed = 1
-const initialGridSizeLongest = 600
+const initialGridSizeLongest = 500
 const initialCanvasSize: [number, number] = [window.innerWidth, window.innerHeight]
 const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
 
@@ -57,13 +59,13 @@ const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
         const scale = 15
 
         // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
-        const permittivityValue = 0.3 + 0.7 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
-        const permeabilityValue = 0.3 + 0.7 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
+        const permittivityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
+        const permeabilityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
 
         const backgroundX = (Math.abs(x % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(y % 1 - 0.5) < 0.25 ? 1 : 0)
         const backgroundY = 1 - backgroundX
 
-        this.color(Math.min(1, eAA / scale + 0.5 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.5 * backgroundY * permeabilityValue))
+        this.color(Math.min(1, eAA / scale + 0.7 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.7 * backgroundY * permeabilityValue))
     }).setOutput(canvasSize).setGraphical(true).setFunctions([getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
@@ -123,7 +125,7 @@ export default function () {
 
     const [brushSize, setBrushSize] = useState(defaultSignalBrushSize)
     const [brushValue, setBrushValue] = useState(defaultSignalBrushValue)
-    const [signalFrequency, setSignalFrequency] = useState(1)
+    const [signalFrequency, setSignalFrequency] = useState(defaultSignalFrequency)
     const [drawingPermeability, setDrawingPermeability] = useState(false)
     const [drawingPermittivity, setDrawingPermittivity] = useState(false)
     const [clickOption, setClickOption] = useState(2) // eps, mu, signal
@@ -306,7 +308,9 @@ export default function () {
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
-            <CollapsibleContainer title="Menu" style={{ position: "absolute", opacity: 0.8, maxHeight: canvasSize[1], overflowY: "auto" }} buttonStyle={{background: "rgb(60, 60, 60)"}}>
+            <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{position: "absolute", right: 10, top: 10, cursor: "pointer"}} />
+
+            <CollapsibleContainer title="Menu" style={{ position: "absolute", opacity: 0.8, maxHeight: Math.round(canvasSize[1] * 0.7), overflowY: "auto" }} buttonStyle={{background: "rgb(60, 60, 60)"}}>
                 <CollapsibleContainer title="Save / Load">
                     <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
                 </CollapsibleContainer>
