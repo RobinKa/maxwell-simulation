@@ -251,8 +251,10 @@ export default function () {
 
     const simStep = useCallback(() => {
         if (simulator) {
-            drawCanvasRef.current!.width = window.innerWidth
-            drawCanvasRef.current!.height = window.innerHeight
+            if (drawCanvasRef.current) {
+                drawCanvasRef.current.width = window.innerWidth
+                drawCanvasRef.current.height = window.innerHeight
+            }
 
             const simData = simulator.getData()
 
@@ -396,8 +398,8 @@ export default function () {
     }, [clickOption, previousClickOption, signalBrushSize, signalBrushValue, materialBrushSize, materialBrushValue, brushSize, brushValue])
 
     return (
-        <div>
-            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", userSelect: "none" }}
+        <div style={{ touchAction: "none" }}>
+            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", userSelect: "none", top: 0, left: 0, width: canvasSize[0], height: canvasSize[1] }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
                 onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY]) }}
                 onMouseUp={e => onInputUp()}
