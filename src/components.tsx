@@ -139,11 +139,9 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
 
     const loadMap = useCallback((simulatorMap: SimulatorMap) => {
         if (simulator) {
-            simulator.setGridSize(simulatorMap.materialMap.shape)
             simulator.resetFields()
             simulator.loadPermeability(simulatorMap.materialMap.permeability)
             simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
-            simulator.setGridSize(simulatorMap.simulationSettings.gridSize)
         }
 
         const loadedSources = simulatorMap.sourcesDescriptors.map(desc => {

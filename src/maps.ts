@@ -116,13 +116,21 @@ export function fiberOptics(): SimulatorMap {
         }
     }
 
+    const endPoint = getCurvePoint(1)
+
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
         amplitude: 2000000,
-        frequency: 3,
-        position: getCurvePoint(1),
+        frequency: 5,
+        position: [endPoint[0] - 1, endPoint[1]],
         turnOffTime: 0.5
-    }]
+    }, {
+        type: "point",
+        amplitude: 2000000,
+        frequency: 5,
+        position: [endPoint[0] + 2, endPoint[1]],
+        turnOffTime: 0.5
+    },]
 
     const simulationSettings: SimulationSettings = {
         dt: 0.02,
