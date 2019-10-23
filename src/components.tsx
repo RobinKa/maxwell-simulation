@@ -1,6 +1,8 @@
 import React, { ReactElement, useState, useCallback } from "react"
-import { simulatorMapToImageUrl, imageUrlToSimulatorMap } from "./util"
+import { encodeMaterialMap, decodeMaterialMap, SimulatorMap } from "./serialization"
 import { FDTDSimulator } from "./simulator"
+import { SignalSource, PointSignalSource } from "./sources"
+import * as maps from "./maps"
 
 export type CollapsibleContainerProps = {
     children: ReactElement<any> | ReactElement<any>[] | null
@@ -58,7 +60,7 @@ export type OptionSelectorProps = {
 
 export function OptionSelector(props: OptionSelectorProps) {
     return (
-        <div style={{margin: "10px"}}>
+        <div style={{ margin: "10px" }}>
             {props.options.map((option, optionIndex) =>
                 <button className={props.buttonClassName} key={option} style={{
                     backgroundColor: "rgb(50, 50, 50)",
@@ -68,7 +70,6 @@ export function OptionSelector(props: OptionSelectorProps) {
                     width: "70px",
                     overflow: "hidden",
                     textOverflow: "hidden"
-                    //width: `${100 / props.options.length}%`, background: "rgb(100, 100, 100)", color: "white"
                 }}
                     onClick={e => props.setSelectedOption(optionIndex)}>
                     {option}
@@ -92,7 +93,7 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
         if (simulator) {
             const simData = simulator.getData()
 
-            window.open(simulatorMapToImageUrl({
+            window.open(encodeMaterialMap({
                 permittivity: simData.permittivity.values.toArray() as number[][],
                 permeability: simData.permeability.values.toArray() as number[][],
                 shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
@@ -102,7 +103,7 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
 
     const onLoadClicked = useCallback(() => {
         if (simulator) {
-            imageUrlToSimulatorMap(simulatorMapUrl, [gridSize[0], gridSize[1]], map => {
+            decodeMaterialMap(simulatorMapUrl, [gridSize[0], gridSize[1]], map => {
                 if (simulator) {
                     simulator.loadPermeability(map.permeability)
                     simulator.loadPermittivity(map.permittivity)
@@ -120,6 +121,51 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
                 <input type="text" onChange={e => setSimulatorMapUrl(e.target.value)} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }} />
                 <button onClick={onLoadClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Load map url</button>
             </div>
+        </div>
+    )
+}
+
+export type ExamplesComponentProps = {
+    simulator: FDTDSimulator | null
+    setGridSizeLongest: (gridSizeLongest: number) => void
+    setDt: (dt: number) => void
+    setCellSize: (cellSize: number) => void
+    setSimulationSpeed: (simulationSpeed: number) => void
+    setSources: (sources: SignalSource[]) => void
+}
+
+export function ExamplesComponent(props: ExamplesComponentProps) {
+    const { simulator, setGridSizeLongest, setDt, setCellSize, setSimulationSpeed, setSources } = props
+
+    const loadMap = useCallback((simulatorMap: SimulatorMap) => {
+        if (simulator) {
+            simulator.setGridSize(simulatorMap.materialMap.shape)
+            simulator.resetFields()
+            simulator.loadPermeability(simulatorMap.materialMap.permeability)
+            simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
+            simulator.setGridSize(simulatorMap.simulationSettings.gridSize)
+        }
+
+        const loadedSources = simulatorMap.sourcesDescriptors.map(desc => {
+            if (desc.type === "point") {
+                return new PointSignalSource(desc.amplitude, desc.frequency, desc.position, desc.turnOffTime)
+            }
+
+            throw new Error(`Unsupported source type: ${desc.type}`)
+        })
+
+        setCellSize(simulatorMap.simulationSettings.cellSize)
+        setDt(simulatorMap.simulationSettings.dt)
+        setSimulationSpeed(simulatorMap.simulationSettings.simulationSpeed)
+        setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
+        setSources(loadedSources)
+    }, [simulator, setCellSize, setDt, setSimulationSpeed, setGridSizeLongest, setSources])
+
+    return (
+        <div style={{ padding: "10px" }}>
+            <button onClick={_ => loadMap(maps.empty())} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
+            <button onClick={_ => loadMap(maps.doubleSlit())} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
+            <button onClick={_ => loadMap(maps.fiberOptics())} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
         </div>
     )
 }

@@ -25,6 +25,7 @@ export interface Simulator {
     stepMagnetic: (dt: number) => void
     resetFields: () => void
     resetMaterials: () => void
+    injectSignal: (pos: [number, number], size: number, value: number, dt: number) => void
     getData: () => SimulationData
 }
 
