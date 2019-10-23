@@ -60,11 +60,11 @@ export class FDTDSimulator implements Simulator {
     constructor(readonly gpu: GPU, private gridSize: [number, number], private cellSize: number) {
         this.makeFieldTexture = memoByName(() => this.gpu.createKernel(function (value: number) {
             return value
-        }).setOutput(this.gridSize).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true))
+        }).setOutput(this.gridSize).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single"))
 
         this.copyTexture = memoByName(() => this.gpu.createKernel(function (texture: number[][]) {
             return texture[this.thread.y!][this.thread.x]
-        }).setOutput(this.gridSize).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true))
+        }).setOutput(this.gridSize).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single"))
 
         this.data = {
             time: 0,
@@ -100,7 +100,7 @@ export class FDTDSimulator implements Simulator {
             return within ? value + keep * oldValue : oldValue
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true))
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single"))
 
         this.injectSource = this.gpu.createKernel(function (source: number[][], field: number[][], dt: number) {
             const x = this.thread.x as number
@@ -109,7 +109,7 @@ export class FDTDSimulator implements Simulator {
             const gy = this.output.y as number
 
             return getAt(field, gx, gy, x, y) + getAt(source, gx, gy, x, y) * dt
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.decaySource = this.gpu.createKernel(function (source: number[][], dt: number) {
             const x = this.thread.x as number
@@ -118,7 +118,7 @@ export class FDTDSimulator implements Simulator {
             const gy = this.output.y as number
 
             return getAt(source, gx, gy, x, y) * Math.pow(0.1, dt)
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.updateMagneticX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
@@ -131,7 +131,7 @@ export class FDTDSimulator implements Simulator {
                 (getAt(fieldZ, gx, gy, x, y + 1) - getAt(fieldZ, gx, gy, x, y)))
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.updateMagneticY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
@@ -144,7 +144,7 @@ export class FDTDSimulator implements Simulator {
                 -(getAt(fieldZ, gx, gy, x + 1, y) - getAt(fieldZ, gx, gy, x, y)))
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.updateMagneticZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permeability: number[][], magFieldZ: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
@@ -158,7 +158,7 @@ export class FDTDSimulator implements Simulator {
                 (getAt(fieldX, gx, gy, x, y + 1) - getAt(fieldX, gx, gy, x, y)))
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.updateElectricX = this.gpu.createKernel(function (fieldY: number[][], fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
@@ -171,7 +171,7 @@ export class FDTDSimulator implements Simulator {
                 (getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x, y - 1)))
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.updateElectricY = this.gpu.createKernel(function (fieldX: number[][], fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
@@ -184,7 +184,7 @@ export class FDTDSimulator implements Simulator {
                 -(getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x - 1, y)))
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
 
         this.updateElectricZ = this.gpu.createKernel(function (fieldX: number[][], fieldY: number[][], permittivity: number[][], elFieldZ: number[][], dt: number, cs: number) {
             const x = this.thread.x as number
@@ -198,7 +198,7 @@ export class FDTDSimulator implements Simulator {
                 (getAt(fieldX, gx, gy, x, y) - getAt(fieldX, gx, gy, x, y - 1)))
         }, {
             constants: { cellSize: cellSize },
-        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true)
+        }).setOutput(this.gridSize).setFunctions([getAt]).setWarnVarUsage(false).setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
     }
 
     setGridSize = (gridSize: [number, number]) => {

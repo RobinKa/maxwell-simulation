@@ -61,6 +61,8 @@ export function OptionSelector(props: OptionSelectorProps) {
         <div style={{margin: "10px"}}>
             {props.options.map((option, optionIndex) =>
                 <button className={props.buttonClassName} key={option} style={{
+                    backgroundColor: "rgb(50, 50, 50)",
+                    color: "white",
                     border: optionIndex === props.selectedOption ? "3px solid rgb(0, 150, 255)" : "0",
                     height: "30px",
                     width: "70px",
@@ -132,6 +134,9 @@ export type SettingsComponentProps = {
     cellSize: number
     setCellSize: (cellSize: number) => void
 
+    resolutionScale: number
+    setResolutionScale: (resolutionScale: number) => void
+
     simulationSpeed: number
     setSimulationSpeed: (simulationSpeed: number) => void
 }
@@ -142,6 +147,7 @@ export function SettingsComponent(props: SettingsComponentProps) {
             <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
             <LabeledSlider label="Time step size" value={props.dt} setValue={props.setDt} min={0.001} max={0.1} step={0.001} />
             <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.001} max={1} step={0.001} />
+            <LabeledSlider label="Resolution scale" value={props.resolutionScale} setValue={props.setResolutionScale} min={0.1} max={2} step={0.1} />
             <LabeledSlider label="Simulation speed" value={props.simulationSpeed} setValue={props.setSimulationSpeed} min={0.1} max={10} step={0.1} />
         </div>
     )
@@ -172,8 +178,8 @@ export function ControlComponent(props: ControlComponentProps) {
             <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             <OptionSelector options={["ε-Brush", "µ-Brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>
-                <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>
-                <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset materials</button>
+                <button onClick={props.resetFields} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>
+                <button onClick={props.resetMaterials} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset materials</button>
             </div>
         </div>
     )

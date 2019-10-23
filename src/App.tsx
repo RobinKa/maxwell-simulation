@@ -1,23 +1,44 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { GPU } from "gpu.js"
+import { GPU, GPUMode, GPUInternalMode, IKernelRunShortcut } from "gpu.js"
 import { FDTDSimulator } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent } from './components'
 import { toggleFullScreen } from './util'
 import Fullscreen from "./icons/fullscreen.png"
 import "./App.css"
 
-const defaultSignalBrushValue = 20
+function getGpuMode(): GPUMode | GPUInternalMode {
+    if (GPU.isSinglePrecisionSupported) {
+        if (GPU.isWebGL2Supported) {
+            return "webgl2"
+        } else if (GPU.isWebGLSupported) {
+            return "webgl"
+        }
+    }
+
+    return "cpu"
+}
+
+const gpuMode = getGpuMode()
+console.log(`Using GPU mode ${gpuMode}`)
+
+const defaultSignalBrushValue = gpuMode === "cpu" ? 3 : 20
 const defaultSignalBrushSize = 1
-const defaultSignalFrequency = 3
+const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
 const defaultMaterialBrushValue = 5
 const defaultMaterialBrushSize = 5
 
-const initialDt = 0.02
-const initialCellSize = 0.03
+const initialDt = gpuMode === "cpu" ? 0.05 : 0.02
+const initialCellSize = gpuMode === "cpu" ? 0.08 : 0.03
 const initialSimulationSpeed = 1
-const initialGridSizeLongest = 500
-const initialCanvasSize: [number, number] = [window.innerWidth, window.innerHeight]
+const initialGridSizeLongest = gpuMode === "cpu" ? 200 : 500
+const initialResolutionScale = gpuMode === "cpu" ? 0.3 : 1
+const initialWindowSize: [number, number] = [window.innerWidth, window.innerHeight]
+const initialCanvasSize: [number, number] = calculateCanvasSize(initialWindowSize, initialResolutionScale)
 const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
+
+function calculateCanvasSize(windowSize: [number, number], resolutionScale: number): [number, number] {
+    return [Math.round(windowSize[0] * resolutionScale), Math.round(windowSize[1] * resolutionScale)]
+}
 
 function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]): [number, number] {
     const canvasAspect = canvasSize[0] / canvasSize[1]
@@ -36,38 +57,80 @@ const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
         return field[y][x]
     }
 
-    return g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-        magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-        permittivity: number[][], permeability: number[][], gridSize: number[]) {
-        const gx = gridSize[0]
-        const gy = gridSize[1]
+    let kernel: IKernelRunShortcut
 
-        const x = gx * this.thread.x! / (this.output.x as number)
-        const y = gy * (1 - this.thread.y! / (this.output.y as number))
+    // On CPU we can't use float indices so round the coordinates
+    if (gpuMode !== "cpu") {
+        kernel = g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
+            magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
+            permittivity: number[][], permeability: number[][], gridSize: number[]) {
+            const gx = gridSize[0]
+            const gy = gridSize[1]
+    
+            const x = gx * this.thread.x! / (this.output.x as number)
+            const y = gy * (1 - this.thread.y! / (this.output.y as number))
+    
+            const eAA =
+                getAt(electricFieldX, gx, gy, x, y) * getAt(electricFieldX, gx, gy, x, y) +
+                getAt(electricFieldY, gx, gy, x, y) * getAt(electricFieldY, gx, gy, x, y) +
+                getAt(electricFieldZ, gx, gy, x, y) * getAt(electricFieldZ, gx, gy, x, y)
+    
+            // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
+            const magXAA = getAt(magneticFieldX, gx, gy, x - 0.5, y - 0.5)
+            const magYAA = getAt(magneticFieldY, gx, gy, x - 0.5, y - 0.5)
+            const magZAA = getAt(magneticFieldZ, gx, gy, x - 0.5, y - 0.5)
+    
+            const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
+    
+            const scale = 15
+    
+            // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
+            const permittivityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
+            const permeabilityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
+    
+            const backgroundX = (Math.abs(x % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(y % 1 - 0.5) < 0.25 ? 1 : 0)
+            const backgroundY = 1 - backgroundX
+    
+            this.color(Math.min(1, eAA / scale + 0.7 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.7 * backgroundY * permeabilityValue))
+        })
+    } else {
+        kernel = g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
+            magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
+            permittivity: number[][], permeability: number[][], gridSize: number[]) {
+            const gx = gridSize[0]
+            const gy = gridSize[1]
+    
+            const fx = gx * this.thread.x! / (this.output.x as number)
+            const fy = gy * (1 - this.thread.y! / (this.output.y as number))
+            const x = Math.round(fx)
+            const y = Math.round(fy)
+    
+            const eAA =
+                getAt(electricFieldX, gx, gy, x, y) * getAt(electricFieldX, gx, gy, x, y) +
+                getAt(electricFieldY, gx, gy, x, y) * getAt(electricFieldY, gx, gy, x, y) +
+                getAt(electricFieldZ, gx, gy, x, y) * getAt(electricFieldZ, gx, gy, x, y)
+    
+            // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
+            const magXAA = getAt(magneticFieldX, gx, gy, x, y)
+            const magYAA = getAt(magneticFieldY, gx, gy, x, y)
+            const magZAA = getAt(magneticFieldZ, gx, gy, x, y)
+    
+            const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
+    
+            const scale = 15
+    
+            // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
+            const permittivityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
+            const permeabilityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
+    
+            const backgroundX = (Math.abs(fx % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(fy % 1 - 0.5) < 0.25 ? 1 : 0)
+            const backgroundY = 1 - backgroundX
+    
+            this.color(Math.min(1, eAA / scale + 0.7 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.7 * backgroundY * permeabilityValue))
+        })
+    }
 
-        const eAA =
-            getAt(electricFieldX, gx, gy, x, y) * getAt(electricFieldX, gx, gy, x, y) +
-            getAt(electricFieldY, gx, gy, x, y) * getAt(electricFieldY, gx, gy, x, y) +
-            getAt(electricFieldZ, gx, gy, x, y) * getAt(electricFieldZ, gx, gy, x, y)
-
-        // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
-        const magXAA = getAt(magneticFieldX, gx, gy, x - 0.5, y - 0.5)
-        const magYAA = getAt(magneticFieldY, gx, gy, x - 0.5, y - 0.5)
-        const magZAA = getAt(magneticFieldZ, gx, gy, x - 0.5, y - 0.5)
-
-        const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
-
-        const scale = 15
-
-        // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
-        const permittivityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
-        const permeabilityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
-
-        const backgroundX = (Math.abs(x % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(y % 1 - 0.5) < 0.25 ? 1 : 0)
-        const backgroundY = 1 - backgroundX
-
-        this.color(Math.min(1, eAA / scale + 0.7 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.7 * backgroundY * permeabilityValue))
-    }).setOutput(canvasSize).setGraphical(true).setFunctions([getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
+    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
 function clamp(min: number, max: number, value: number) {
@@ -78,17 +141,25 @@ export default function () {
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
     const [canvasSize, setCanvasSize] = useState<[number, number]>(initialCanvasSize)
+    const [windowSize, setWindowSize] = useState<[number, number]>(initialWindowSize)
     const [gridSizeLongest, setGridSizeLongest] = useState(initialGridSizeLongest)
     const [dt, setDt] = useState(initialDt)
     const [cellSize, setCellSize] = useState(initialCellSize)
+    const [resolutionScale, setResolutionScale] = useState(initialResolutionScale)
     const [simulationSpeed, setSimulationSpeed] = useState(initialSimulationSpeed)
 
     useEffect(() => {
-        const adjustCanvasSize = () => setCanvasSize([window.innerWidth, window.innerHeight])
+        const adjustCanvasSize = () => {
+            const wndSize: [number, number] = [window.innerWidth, window.innerHeight]
+            setCanvasSize(calculateCanvasSize(wndSize, resolutionScale))
+            setWindowSize(wndSize)
+        }
+
+        adjustCanvasSize()
 
         window.addEventListener("resize", adjustCanvasSize)
         return () => window.removeEventListener("resize", adjustCanvasSize)
-    }, [])
+    }, [resolutionScale])
 
     const gridSize = useMemo<[number, number]>(() => calculateGridSize(gridSizeLongest, canvasSize), [canvasSize, gridSizeLongest])
 
@@ -96,7 +167,7 @@ export default function () {
     const [gpu, setGpu] = useState<GPU | null>(null)
     useEffect(() => {
         if (drawCanvasRef.current) {
-            setGpu(new GPU({ mode: "webgl", canvas: drawCanvasRef.current }))
+            setGpu(new GPU({ mode: gpuMode, canvas: drawCanvasRef.current }))
         }
     }, [drawCanvasRef])
 
@@ -144,8 +215,8 @@ export default function () {
             const simData = simulator.getData()
 
             if (mouseDownPos.current !== null) {
-                const centerX = clamp(0, gridSize[0] - 1, Math.floor(gridSize[0] * mouseDownPos.current[0] / canvasSize[0]))
-                const centerY = clamp(0, gridSize[1] - 1, Math.floor(gridSize[1] * mouseDownPos.current[1] / canvasSize[1]))
+                const centerX = clamp(0, gridSize[0] - 1, Math.floor(gridSize[0] * mouseDownPos.current[0] / windowSize[0])) 
+                const centerY = clamp(0, gridSize[1] - 1, Math.floor(gridSize[1] * mouseDownPos.current[1] / windowSize[1]))
                 const brushHalfSize = Math.round(brushSize / 2)
 
                 simulator.injectSignal([centerX, centerY], brushHalfSize, -brushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
@@ -154,7 +225,7 @@ export default function () {
             simulator.stepMagnetic(dt)
             simulator.stepElectric(dt)
         }
-    }, [simulator, canvasSize, gridSize, dt, signalFrequency, brushValue, brushSize])
+    }, [simulator, gridSize, dt, signalFrequency, brushValue, brushSize, windowSize])
 
     useEffect(() => {
         const timer = setInterval(simStep, 1000 / simulationSpeed * dt)
@@ -164,8 +235,9 @@ export default function () {
     const drawStep = useCallback(() => {
         if (simulator && renderSim) {
             if (drawCanvasRef.current) {
-                drawCanvasRef.current.width = window.innerWidth
-                drawCanvasRef.current.height = window.innerHeight
+                const cnvSize = calculateCanvasSize([window.innerWidth, window.innerHeight], resolutionScale)
+                drawCanvasRef.current.width = cnvSize[0]
+                drawCanvasRef.current.height = cnvSize[1]
             }
 
             const simData = simulator.getData()
@@ -176,7 +248,7 @@ export default function () {
                     simData.permittivity.values, simData.permeability.values, gridSize)
             }
         }
-    }, [simulator, renderSim, gridSize, drawCanvasRef])
+    }, [simulator, renderSim, gridSize, resolutionScale, drawCanvasRef])
 
     useEffect(() => {
         let stop = false
@@ -192,25 +264,20 @@ export default function () {
         return () => { stop = true }
     }, [drawStep])
 
-    const changePermittivity = useCallback((canvasPos: [number, number]) => {
+    const changeMaterial = useCallback((canvasPos: [number, number], material: "permittivity" | "permeability") => {
         if (simulator) {
-            const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
-            const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
+            const centerX = Math.round(gridSize[0] * (canvasPos[0] / windowSize[0]))
+            const centerY = Math.round(gridSize[1] * (canvasPos[1] / windowSize[1]))
             const brushHalfSize = Math.round(brushSize / 2)
 
-            simulator.drawPermittivity([centerX, centerY, 0], brushHalfSize, brushValue)
-        }
-    }, [simulator, gridSize, canvasSize, brushSize, brushValue])
+            if (material === "permittivity") {
+                simulator.drawPermittivity([centerX, centerY, 0], brushHalfSize, brushValue)
+            } else {
+                simulator.drawPermeability([centerX, centerY, 0], brushHalfSize, brushValue)
+            }
 
-    const changePermeability = useCallback((canvasPos: [number, number]) => {
-        if (simulator) {
-            const centerX = Math.round(gridSize[0] * (canvasPos[0] / canvasSize[0]))
-            const centerY = Math.round(gridSize[1] * (canvasPos[1] / canvasSize[1]))
-            const brushHalfSize = Math.round(brushSize / 2)
-
-            simulator.drawPermeability([centerX, centerY, 0], brushHalfSize, brushValue)
         }
-    }, [simulator, gridSize, canvasSize, brushSize, brushValue])
+    }, [simulator, gridSize, windowSize, brushSize, brushValue])
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
@@ -230,14 +297,14 @@ export default function () {
             if (clickOption === optionSignal) {
                 mouseDownPos.current = [clientX, clientY]
             } else if (clickOption === optionPermittivityBrush) {
-                changePermittivity([clientX, clientY])
+                changeMaterial([clientX, clientY], "permittivity")
                 setDrawingPermittivity(true)
             } else if (clickOption === optionPermeabilityBrush) {
-                changePermeability([clientX, clientY])
+                changeMaterial([clientX, clientY], "permeability")
                 setDrawingPermeability(true)
             }
         }
-    }, [simulator, changePermittivity, changePermeability, clickOption])
+    }, [simulator, changeMaterial, clickOption])
 
     const onInputMove = useCallback(([clientX, clientY]: [number, number]) => {
         if (simulator) {
@@ -246,14 +313,14 @@ export default function () {
             }
 
             if (drawingPermittivity) {
-                changePermittivity([clientX, clientY])
+                changeMaterial([clientX, clientY], "permittivity")
             }
 
             if (drawingPermeability) {
-                changePermeability([clientX, clientY])
+                changeMaterial([clientX, clientY], "permeability")
             }
         }
-    }, [simulator, changePermittivity, changePermeability, clickOption, drawingPermeability, drawingPermittivity])
+    }, [simulator, changeMaterial, clickOption, drawingPermeability, drawingPermittivity])
 
     const onInputUp = useCallback(() => {
         if (clickOption === optionSignal) {
@@ -289,7 +356,7 @@ export default function () {
 
     return (
         <div style={{ touchAction: "none", userSelect: "none" }}>
-            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: canvasSize[0], height: canvasSize[1] }}
+            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: windowSize[0], height: windowSize[1] }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
                 onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY]) }}
                 onMouseUp={e => onInputUp()}
@@ -309,10 +376,10 @@ export default function () {
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
-            <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{position: "absolute", right: 10, top: 10, cursor: "pointer"}} />
+            <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{ position: "absolute", right: 10, top: 10, cursor: "pointer" }} />
 
-            <CollapsibleContainer id="Menu" title="Menu" buttonStyle={{background: "rgb(60, 60, 60)"}}>
-            <CollapsibleContainer title="Controls">
+            <CollapsibleContainer id="Menu" title="Menu" buttonStyle={{ background: "rgb(60, 60, 60)" }}>
+                <CollapsibleContainer title="Controls">
                     <ControlComponent
                         brushSize={brushSize} setBrushSize={setBrushSize}
                         brushValue={brushValue} setBrushValue={setBrushValue}
@@ -327,6 +394,7 @@ export default function () {
                     <SettingsComponent
                         gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
                         simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                        resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
                         cellSize={cellSize} setCellSize={setCellSize}
                         dt={dt} setDt={setDt} />
                 </CollapsibleContainer>
