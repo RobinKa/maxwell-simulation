@@ -120,7 +120,7 @@ export function fiberOptics(): SimulatorMap {
         type: "point",
         amplitude: 2000000,
         frequency: 3,
-        position: getCurvePoint(0),
+        position: getCurvePoint(1),
         turnOffTime: 0.5
     }]
 
