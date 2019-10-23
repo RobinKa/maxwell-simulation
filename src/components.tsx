@@ -4,16 +4,19 @@ import { FDTDSimulator } from "./simulator"
 
 export type CollapsibleContainerProps = {
     children: ReactElement<any> | ReactElement<any>[] | null
+    id?: string
+    className?: string
     style?: React.CSSProperties
     buttonStyle?: React.CSSProperties
     title?: string
+    initiallyCollapsed?: boolean
 }
 
 export function CollapsibleContainer(props: CollapsibleContainerProps) {
-    const [collapsed, setCollapsed] = useState(false)
+    const [collapsed, setCollapsed] = useState(props.initiallyCollapsed !== undefined ? props.initiallyCollapsed : false)
 
     return (
-        <div style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", ...props.style }}>
+        <div id={props.id} className={props.className} style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", ...props.style }}>
             <button onClick={e => setCollapsed(!collapsed)} style={{ width: "100%", height: "24px", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", cursor: "pointer", ...props.buttonStyle }}>
                 {props.title ? `${props.title} ` : ""}[{collapsed ? "+" : "-"}]
             </button>
@@ -38,7 +41,7 @@ export function LabeledSlider(props: LabeledSliderProps) {
             <div>
                 <input type="range" min={props.min} max={props.max} value={props.value} step={props.step}
                     onChange={e => props.setValue(parseFloat(e.target.value))} style={{ height: 10, width: "100%" }} />
-                <div style={{ textAlign: "center", lineHeight: 0.1, marginBottom: "7px" }}>
+                <div style={{ textAlign: "center", lineHeight: 0.2, marginBottom: "7px" }}>
                     {props.value}
                 </div>
             </div>
@@ -50,18 +53,20 @@ export type OptionSelectorProps = {
     options: string[]
     selectedOption: number
     setSelectedOption: (selectedOption: number) => void
+    buttonClassName?: string
 }
 
 export function OptionSelector(props: OptionSelectorProps) {
     return (
-        <div>
+        <div style={{margin: "10px"}}>
             {props.options.map((option, optionIndex) =>
-                <button key={option} style={{
-                    boxSizing: "border-box",
-                    border: optionIndex === props.selectedOption ? "4px solid rgb(0, 150, 255)" : "0",
+                <button className={props.buttonClassName} key={option} style={{
+                    border: optionIndex === props.selectedOption ? "3px solid rgb(0, 150, 255)" : "0",
                     height: "30px",
-                    margin: "5px",
-                    width: `${100 / props.options.length}%`, background: "rgb(100, 100, 100)", color: "white"
+                    width: "70px",
+                    overflow: "hidden",
+                    textOverflow: "hidden"
+                    //width: `${100 / props.options.length}%`, background: "rgb(100, 100, 100)", color: "white"
                 }}
                     onClick={e => props.setSelectedOption(optionIndex)}>
                     {option}
@@ -165,10 +170,10 @@ export function ControlComponent(props: ControlComponentProps) {
             <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
             <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
             <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
-            <OptionSelector options={["ε brush", "µ brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+            <OptionSelector options={["ε-Brush", "µ-Brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>
-                <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset fields</button>
-                <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Reset materials</button>
+                <button onClick={props.resetFields} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>
+                <button onClick={props.resetMaterials} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset materials</button>
             </div>
         </div>
     )

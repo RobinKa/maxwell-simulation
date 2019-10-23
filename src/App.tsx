@@ -4,6 +4,7 @@ import { FDTDSimulator } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent } from './components'
 import { toggleFullScreen } from './util'
 import Fullscreen from "./icons/fullscreen.png"
+import "./App.css"
 
 const defaultSignalBrushValue = 20
 const defaultSignalBrushSize = 1
@@ -310,24 +311,24 @@ export default function () {
 
             <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{position: "absolute", right: 10, top: 10, cursor: "pointer"}} />
 
-            <CollapsibleContainer title="Menu" style={{ position: "absolute", opacity: 0.8, maxHeight: Math.round(canvasSize[1] * 0.7), overflowY: "auto" }} buttonStyle={{background: "rgb(60, 60, 60)"}}>
-                <CollapsibleContainer title="Save / Load">
-                    <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
-                </CollapsibleContainer>
-                <CollapsibleContainer title="Settings">
-                    <SettingsComponent
-                        gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                        simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
-                        cellSize={cellSize} setCellSize={setCellSize}
-                        dt={dt} setDt={setDt} />
-                </CollapsibleContainer>
-                <CollapsibleContainer title="Controls">
+            <CollapsibleContainer id="Menu" title="Menu" buttonStyle={{background: "rgb(60, 60, 60)"}}>
+            <CollapsibleContainer title="Controls">
                     <ControlComponent
                         brushSize={brushSize} setBrushSize={setBrushSize}
                         brushValue={brushValue} setBrushValue={setBrushValue}
                         signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
                         clickOption={clickOption} setClickOption={setClickOption}
                         resetFields={resetFields} resetMaterials={resetMaterials} />
+                </CollapsibleContainer>
+                <CollapsibleContainer title="Save / Load" initiallyCollapsed={true}>
+                    <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
+                </CollapsibleContainer>
+                <CollapsibleContainer title="Settings" initiallyCollapsed={true}>
+                    <SettingsComponent
+                        gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                        simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                        cellSize={cellSize} setCellSize={setCellSize}
+                        dt={dt} setDt={setDt} />
                 </CollapsibleContainer>
             </CollapsibleContainer>
         </div>
