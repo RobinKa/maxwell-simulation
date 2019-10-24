@@ -405,6 +405,10 @@ export default function () {
                 <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
             }
 
+            {gpuMode === "cpu" &&
+                <div style={{position: "absolute", pointerEvents: "none", left: 10, bottom: 10, color: "red", fontWeight: "lighter"}}>Using CPU (WebGL with float textures unsupported by your device)</div>
+            }
+
             <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{ position: "absolute", right: 10, top: 10, cursor: "pointer" }} />
 
             <CollapsibleContainer id="Menu" title="Menu" buttonStyle={{ background: "rgb(60, 60, 60)" }}>
