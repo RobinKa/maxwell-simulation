@@ -165,6 +165,7 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
             <button onClick={_ => loadMap(maps.empty(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
             <button onClick={_ => loadMap(maps.doubleSlit(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
             <button onClick={_ => loadMap(maps.fiberOptics(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
+            <button onClick={_ => loadMap(maps.lens(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Lens</button>
         </div>
     )
 }

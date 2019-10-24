@@ -5,7 +5,7 @@ function calcGridSize(gridSizeLongest: number, windowSize: [number, number]): [n
     const gridSize = aspectRatio > 1 ?
         [gridSizeLongest, gridSizeLongest / aspectRatio] :
         [gridSizeLongest * aspectRatio, gridSizeLongest]
-    return [Math.round(gridSize[0])+1, Math.round(gridSize[1])+1]
+    return [Math.round(gridSize[0]) + 1, Math.round(gridSize[1]) + 1]
 }
 
 export function empty(windowSize: [number, number]): SimulatorMap {
@@ -138,6 +138,55 @@ export function fiberOptics(windowSize: [number, number]): SimulatorMap {
         position: [endPoint[0] + 2, endPoint[1]],
         turnOffTime: 0.5
     },]
+
+    const simulationSettings: SimulationSettings = {
+        dt: 0.02,
+        cellSize: 0.03,
+        gridSize: gridSize,
+        simulationSpeed: 1
+    }
+
+    return {
+        sourcesDescriptors: sourceDescriptors,
+        simulationSettings: simulationSettings,
+        materialMap: materialMap
+    }
+}
+
+
+export function lens(windowSize: [number, number]): SimulatorMap {
+    const gridSize = calcGridSize(300, windowSize)
+
+    const materialMap: MaterialMap = {
+        permittivity: [],
+        permeability: [],
+        shape: gridSize
+    }
+
+    const center = [gridSize[0] * 0.6, gridSize[1] / 2]
+
+    function isLensPoint(point: [number, number]) {
+        const dx = point[0] - center[0]
+        const dy = point[1] - center[1]
+
+        return 4 * dx * dx + dy * dy < gridSize[0] * gridSize[0] / (10 * 10)
+    }
+
+    for (let y = 0; y < gridSize[1]; y++) {
+        materialMap.permittivity.push([])
+        materialMap.permeability.push(new Array(gridSize[0]).fill(1))
+        for (let x = 0; x < gridSize[0]; x++) {
+            materialMap.permittivity[y].push(isLensPoint([x, y]) ? 3 : 1)
+        }
+    }
+
+    const sourceDescriptors: SourceDescriptor[] = [{
+        type: "point",
+        amplitude: 5000000,
+        frequency: 2,
+        position: [Math.round(gridSize[0] / 10), Math.round(gridSize[1] / 2)],
+        turnOffTime: 0.5
+    }]
 
     const simulationSettings: SimulationSettings = {
         dt: 0.02,
