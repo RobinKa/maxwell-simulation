@@ -28,10 +28,10 @@ const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
 const defaultMaterialBrushValue = 5
 const defaultMaterialBrushSize = 5
 
-const initialDt = gpuMode === "cpu" ? 0.05 : 0.02
-const initialCellSize = gpuMode === "cpu" ? 0.08 : 0.03
+const initialDt = gpuMode === "cpu" ? 0.026 : 0.013
+const initialCellSize = gpuMode === "cpu" ? 0.04 : 0.02
 const initialSimulationSpeed = 1
-const initialGridSizeLongest = gpuMode === "cpu" ? 200 : 300
+const initialGridSizeLongest = gpuMode === "cpu" ? 200 : 400
 const initialResolutionScale = gpuMode === "cpu" ? 0.3 : 1
 const initialWindowSize: [number, number] = [window.innerWidth, window.innerHeight]
 const initialCanvasSize: [number, number] = calculateCanvasSize(initialWindowSize, initialResolutionScale)
@@ -416,7 +416,8 @@ export default function () {
                     <ExamplesComponent
                         simulator={simulator} setCellSize={setCellSize} setDt={setDt}
                         setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                        setSources={setSources} windowSize={windowSize} />
+                        setSources={setSources} gridSize={gridSize} dt={dt}
+                        cellSize={cellSize} simulationSpeed={simulationSpeed} />
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Controls">
                     <ControlComponent

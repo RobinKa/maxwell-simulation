@@ -1,5 +1,5 @@
-import React, { ReactElement, useState, useCallback } from "react"
-import { encodeMaterialMap, decodeMaterialMap, SimulatorMap } from "./serialization"
+import React, { ReactElement, useState, useCallback, useMemo } from "react"
+import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings } from "./serialization"
 import { FDTDSimulator } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
@@ -127,7 +127,12 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
 
 export type ExamplesComponentProps = {
     simulator: FDTDSimulator | null
-    windowSize: [number, number]
+
+    dt: number
+    simulationSpeed: number
+    cellSize: number
+    gridSize: [number, number]
+
     setGridSizeLongest: (gridSizeLongest: number) => void
     setDt: (dt: number) => void
     setCellSize: (cellSize: number) => void
@@ -160,12 +165,21 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
         setSources(loadedSources)
     }, [simulator, setCellSize, setDt, setSimulationSpeed, setGridSizeLongest, setSources])
 
+    const simulationSettings = useMemo<SimulationSettings>(() => {
+        return {
+            dt: props.dt,
+            cellSize: props.cellSize,
+            gridSize: props.gridSize,
+            simulationSpeed: props.simulationSpeed
+        }
+    }, [props.dt, props.cellSize, props.gridSize, props.simulationSpeed])
+
     return (
         <div style={{ padding: "10px" }}>
-            <button onClick={_ => loadMap(maps.empty(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
-            <button onClick={_ => loadMap(maps.doubleSlit(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
-            <button onClick={_ => loadMap(maps.fiberOptics(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
-            <button onClick={_ => loadMap(maps.lens(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Lens</button>
+            <button onClick={_ => loadMap(maps.empty(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
+            <button onClick={_ => loadMap(maps.doubleSlit(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
+            <button onClick={_ => loadMap(maps.fiberOptics(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
+            <button onClick={_ => loadMap(maps.lens(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Lens</button>
         </div>
     )
 }
@@ -195,7 +209,7 @@ export function SettingsComponent(props: SettingsComponentProps) {
         <div style={{ padding: "10px" }}>
             <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
             <LabeledSlider label="Time step size" value={props.dt} setValue={props.setDt} min={0.001} max={0.1} step={0.001} />
-            <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.001} max={1} step={0.001} />
+            <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.002} max={0.2} step={0.001} />
             <LabeledSlider label="Resolution scale" value={props.resolutionScale} setValue={props.setResolutionScale} min={0.1} max={2} step={0.1} />
             <LabeledSlider label="Simulation speed" value={props.simulationSpeed} setValue={props.setSimulationSpeed} min={0.1} max={10} step={0.1} />
             <input type="checkbox" checked={props.reflectiveBoundary} onChange={e => props.setReflectiveBoundary(e.target.checked)} />Reflective boundary
@@ -224,7 +238,7 @@ export function ControlComponent(props: ControlComponentProps) {
     return (
         <div style={{ padding: "10px" }}>
             <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
-            <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={100} step={1} />
+            <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={255} step={1} />
             <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             <OptionSelector options={["ε-Brush", "µ-Brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>

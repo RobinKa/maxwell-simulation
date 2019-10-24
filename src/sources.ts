@@ -12,7 +12,7 @@ export class PointSignalSource implements SignalSource {
     inject = (simulator: Simulator, dt: number) => {
         const t = simulator.getData().time
         if (this.turnOffTime === undefined || t <= this.turnOffTime) {
-            const amplitude = -this.amplitude * Math.cos(2 * Math.PI * this.frequency * t) * dt
+            const amplitude = -this.amplitude * Math.cos(2 * Math.PI * this.frequency * t)
             simulator.injectSignal(this.position, 1, amplitude, dt)
         }
     }
