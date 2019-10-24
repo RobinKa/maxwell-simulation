@@ -127,6 +127,7 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
 
 export type ExamplesComponentProps = {
     simulator: FDTDSimulator | null
+    windowSize: [number, number]
     setGridSizeLongest: (gridSizeLongest: number) => void
     setDt: (dt: number) => void
     setCellSize: (cellSize: number) => void
@@ -161,9 +162,9 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
 
     return (
         <div style={{ padding: "10px" }}>
-            <button onClick={_ => loadMap(maps.empty())} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
-            <button onClick={_ => loadMap(maps.doubleSlit())} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
-            <button onClick={_ => loadMap(maps.fiberOptics())} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
+            <button onClick={_ => loadMap(maps.empty(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
+            <button onClick={_ => loadMap(maps.doubleSlit(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
+            <button onClick={_ => loadMap(maps.fiberOptics(props.windowSize))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
         </div>
     )
 }

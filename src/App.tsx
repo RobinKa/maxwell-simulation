@@ -408,7 +408,7 @@ export default function () {
                     <ExamplesComponent
                         simulator={simulator} setCellSize={setCellSize} setDt={setDt}
                         setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                        setSources={setSources} />
+                        setSources={setSources} windowSize={windowSize} />
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Controls">
                     <ControlComponent

@@ -1,18 +1,25 @@
 import { SimulatorMap, MaterialMap, SourceDescriptor, SimulationSettings } from "./serialization"
 
-export function empty(): SimulatorMap {
-    const gridSize: [number, number] = [500, 500]
-    const materialMapSize: [number, number] = [500, 500]
+function calcGridSize(gridSizeLongest: number, windowSize: [number, number]): [number, number] {
+    const aspectRatio = windowSize[0] / windowSize[1]
+    const gridSize = aspectRatio > 1 ?
+        [gridSizeLongest, gridSizeLongest / aspectRatio] :
+        [gridSizeLongest * aspectRatio, gridSizeLongest]
+    return [Math.round(gridSize[0]), Math.round(gridSize[1])]
+}
+
+export function empty(windowSize: [number, number]): SimulatorMap {
+    const gridSize = calcGridSize(500, windowSize)
 
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
-        shape: materialMapSize
+        shape: gridSize
     }
 
-    for (let y = 0; y < materialMapSize[1]; y++) {
-        materialMap.permittivity.push(new Array(materialMapSize[0]).fill(1))
-        materialMap.permeability.push(new Array(materialMapSize[0]).fill(1))
+    for (let y = 0; y < gridSize[1]; y++) {
+        materialMap.permittivity.push(new Array(gridSize[0]).fill(1))
+        materialMap.permeability.push(new Array(gridSize[0]).fill(1))
     }
 
     const sourceDescriptors: SourceDescriptor[] = []
@@ -31,39 +38,40 @@ export function empty(): SimulatorMap {
     }
 }
 
-export function doubleSlit(): SimulatorMap {
-    const gridSize: [number, number] = [500, 500]
-    const materialMapSize: [number, number] = [500, 500]
+export function doubleSlit(windowSize: [number, number]): SimulatorMap {
+    const gridSize = calcGridSize(500, windowSize)
 
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
-        shape: materialMapSize
+        shape: gridSize
     }
 
-    for (let y = 0; y < materialMapSize[1]; y++) {
-        const isWallRow = Math.abs(y - materialMapSize[1] / 10) < 2
-        const permittivityRow = new Array(materialMapSize[0]).fill(isWallRow ? 100 : 1)
+    const slitCenterX = Math.round(0.75 * gridSize[0])
+
+    for (let y = 0; y < gridSize[1]; y++) {
+        const isWallRow = Math.abs(y - gridSize[1] / 10) < 2
+        const permittivityRow = new Array(gridSize[0]).fill(isWallRow ? 100 : 1)
 
         if (isWallRow) {
-            for (let x = materialMapSize[0] / 5 - 10; x < materialMapSize[0] / 5 - 5; x++) {
+            for (let x = slitCenterX - 10; x < slitCenterX - 5; x++) {
                 permittivityRow[x] = 1
             }
 
-            for (let x = materialMapSize[0] / 5 + 10; x > materialMapSize[0] / 5 + 5; x--) {
+            for (let x = slitCenterX + 10; x > slitCenterX + 5; x--) {
                 permittivityRow[x] = 1
             }
         }
 
         materialMap.permittivity.push(permittivityRow)
-        materialMap.permeability.push(new Array(materialMapSize[0]).fill(1))
+        materialMap.permeability.push(new Array(gridSize[0]).fill(1))
     }
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
         amplitude: 2000000,
         frequency: 3,
-        position: [Math.round(gridSize[0] / 5), Math.round(gridSize[1] / 15)]
+        position: [Math.round(slitCenterX), Math.round(gridSize[1] / 15)]
     }]
 
     const simulationSettings: SimulationSettings = {
@@ -80,25 +88,24 @@ export function doubleSlit(): SimulatorMap {
     }
 }
 
-export function fiberOptics(): SimulatorMap {
-    const gridSize: [number, number] = [500, 500]
-    const materialMapSize: [number, number] = [500, 500]
+export function fiberOptics(windowSize: [number, number]): SimulatorMap {
+    const gridSize = calcGridSize(500, windowSize)
 
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
-        shape: materialMapSize
+        shape: gridSize
     }
 
-    for (let y = 0; y < materialMapSize[1]; y++) {
-        materialMap.permittivity.push(new Array(materialMapSize[0]).fill(1))
-        materialMap.permeability.push(new Array(materialMapSize[0]).fill(1))
+    for (let y = 0; y < gridSize[1]; y++) {
+        materialMap.permittivity.push(new Array(gridSize[0]).fill(1))
+        materialMap.permeability.push(new Array(gridSize[0]).fill(1))
     }
 
     function getCurvePoint(t: number): [number, number] {
         return [
-            Math.round(30 + gridSize[0] / 10 * 0.5 / (2 * t + 1) * (1 + -Math.sin(2 * Math.PI * t))),
-            Math.round(30 + t * gridSize[0] / 3)
+            Math.round(gridSize[0] * 3 / 4 + gridSize[0] / 5 * 0.5 / (2 * t + 1) * -Math.sin(2 * Math.PI * t)),
+            Math.round(gridSize[1] * (1 / 10 + t * (1 - 2 / 10)))
         ]
     }
 
