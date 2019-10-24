@@ -22,7 +22,7 @@ function getGpuMode(): GPUMode | GPUInternalMode {
 const gpuMode = getGpuMode()
 console.log(`Using GPU mode ${gpuMode}`)
 
-const defaultSignalBrushValue = gpuMode === "cpu" ? 3 : 20
+const defaultSignalBrushValue = gpuMode === "cpu" ? 5 : 50
 const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
 const defaultMaterialBrushValue = 5
