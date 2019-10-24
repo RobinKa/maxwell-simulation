@@ -257,8 +257,12 @@ export default function () {
     }, [simulator, dt, signalFrequency, brushValue, brushSize, sources, windowToSimulationPoint])
 
     useEffect(() => {
-        const timer = setInterval(simStep, 1000 / simulationSpeed * dt)
-        return () => clearInterval(timer)
+        if (simulationSpeed > 0) {
+            const timer = setInterval(simStep, 1000 / simulationSpeed * dt)
+            return () => clearInterval(timer)
+        }
+
+        return undefined
     }, [simStep, dt, simulationSpeed])
 
     const drawStep = useCallback(() => {
