@@ -183,6 +183,9 @@ export type SettingsComponentProps = {
 
     simulationSpeed: number
     setSimulationSpeed: (simulationSpeed: number) => void
+
+    reflectiveBoundary: boolean
+    setReflectiveBoundary: (reflectiveBoundary: boolean) => void
 }
 
 export function SettingsComponent(props: SettingsComponentProps) {
@@ -193,6 +196,7 @@ export function SettingsComponent(props: SettingsComponentProps) {
             <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.001} max={1} step={0.001} />
             <LabeledSlider label="Resolution scale" value={props.resolutionScale} setValue={props.setResolutionScale} min={0.1} max={2} step={0.1} />
             <LabeledSlider label="Simulation speed" value={props.simulationSpeed} setValue={props.setSimulationSpeed} min={0.1} max={10} step={0.1} />
+            <input type="checkbox" checked={props.reflectiveBoundary} onChange={e => props.setReflectiveBoundary(e.target.checked)} />Reflective boundary
         </div>
     )
 }

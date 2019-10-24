@@ -36,6 +36,7 @@ const initialResolutionScale = gpuMode === "cpu" ? 0.3 : 1
 const initialWindowSize: [number, number] = [window.innerWidth, window.innerHeight]
 const initialCanvasSize: [number, number] = calculateCanvasSize(initialWindowSize, initialResolutionScale)
 const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
+const initialReflectiveBoundary = false
 
 function calculateCanvasSize(windowSize: [number, number], resolutionScale: number): [number, number] {
     return [Math.round(windowSize[0] * resolutionScale), Math.round(windowSize[1] * resolutionScale)]
@@ -148,6 +149,7 @@ export default function () {
     const [cellSize, setCellSize] = useState(initialCellSize)
     const [resolutionScale, setResolutionScale] = useState(initialResolutionScale)
     const [simulationSpeed, setSimulationSpeed] = useState(initialSimulationSpeed)
+    const [reflectiveBoundary, setReflectiveBoundary] = useState(initialReflectiveBoundary)
 
     const [sources, setSources] = useState<SignalSource[]>([])
 
@@ -174,7 +176,7 @@ export default function () {
         }
     }, [drawCanvasRef])
 
-    const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, initialCellSize) : null, [gpu])
+    const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, initialCellSize, initialReflectiveBoundary) : null, [gpu])
     const renderSim = useMemo(() => gpu ? makeRenderSimulatorCanvas(gpu, initialGridSize) : null, [gpu])
 
     // Update render sim output size
@@ -197,6 +199,13 @@ export default function () {
             simulator.setCellSize(cellSize)
         }
     }, [simulator, cellSize])
+
+    // Update reflective boundary
+    useEffect(() => {
+        if (simulator) {
+            simulator.reflectiveBoundary = reflectiveBoundary
+        }
+    }, [simulator, reflectiveBoundary])
 
     const [brushSize, setBrushSize] = useState(defaultSignalBrushSize)
     const [brushValue, setBrushValue] = useState(defaultSignalBrushValue)
@@ -418,6 +427,7 @@ export default function () {
                         simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
                         resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
                         cellSize={cellSize} setCellSize={setCellSize}
+                        reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
                         dt={dt} setDt={setDt} />
                 </CollapsibleContainer>
             </CollapsibleContainer>
