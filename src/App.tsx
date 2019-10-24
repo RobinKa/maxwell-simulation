@@ -31,7 +31,7 @@ const defaultMaterialBrushSize = 5
 const initialDt = gpuMode === "cpu" ? 0.05 : 0.02
 const initialCellSize = gpuMode === "cpu" ? 0.08 : 0.03
 const initialSimulationSpeed = 1
-const initialGridSizeLongest = gpuMode === "cpu" ? 200 : 500
+const initialGridSizeLongest = gpuMode === "cpu" ? 200 : 300
 const initialResolutionScale = gpuMode === "cpu" ? 0.3 : 1
 const initialWindowSize: [number, number] = [window.innerWidth, window.innerHeight]
 const initialCanvasSize: [number, number] = calculateCanvasSize(initialWindowSize, initialResolutionScale)
@@ -84,16 +84,18 @@ const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
 
             const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
 
-            const scale = 15
+            // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * x)
+            const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
+            const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
 
-            // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
-            const permittivityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
-            const permeabilityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
-
-            const backgroundX = (Math.abs(x % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(y % 1 - 0.5) < 0.25 ? 1 : 0)
+            const backgroundX = (Math.abs((1.5 * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((1.5 * y) % 1 - 0.5) < 0.25 ? 1 : 0)
             const backgroundY = 1 - backgroundX
 
-            this.color(Math.min(1, eAA / scale + 0.7 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.7 * backgroundY * permeabilityValue))
+            const scale = 15
+            this.color(
+                Math.min(1, eAA / scale + 0.8 * backgroundX * permittivityValue),
+                Math.min(1, eAA / scale + mAA / scale),
+                Math.min(1, mAA / scale + 0.8 * backgroundY * permeabilityValue))
         })
     } else {
         kernel = g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
@@ -119,16 +121,18 @@ const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
 
             const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
 
-            const scale = 15
+            // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * x)
+            const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
+            const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
 
-            // Material constants are between 1 and 100, so take log10 ([0, 2]) and divide by 2 to get full range
-            const permittivityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permittivity, gx, gy, x, y))) / 2))
-            const permeabilityValue = 0.1 + 0.9 * Math.max(0, Math.min(1, (0.4342944819 * Math.log(getAt(permeability, gx, gy, x, y))) / 2))
-
-            const backgroundX = (Math.abs(fx % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs(fy % 1 - 0.5) < 0.25 ? 1 : 0)
+            const backgroundX = (Math.abs((1.5 * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((1.5 * y) % 1 - 0.5) < 0.25 ? 1 : 0)
             const backgroundY = 1 - backgroundX
 
-            this.color(Math.min(1, eAA / scale + 0.7 * backgroundX * permittivityValue), Math.min(1, eAA / scale + mAA / scale), Math.min(1, mAA / scale + 0.7 * backgroundY * permeabilityValue))
+            const scale = 15
+            this.color(
+                Math.min(1, eAA / scale + 0.8 * backgroundX * permittivityValue),
+                Math.min(1, eAA / scale + mAA / scale),
+                Math.min(1, mAA / scale + 0.8 * backgroundY * permeabilityValue))
         })
     }
 

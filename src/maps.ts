@@ -5,11 +5,11 @@ function calcGridSize(gridSizeLongest: number, windowSize: [number, number]): [n
     const gridSize = aspectRatio > 1 ?
         [gridSizeLongest, gridSizeLongest / aspectRatio] :
         [gridSizeLongest * aspectRatio, gridSizeLongest]
-    return [Math.round(gridSize[0]), Math.round(gridSize[1])]
+    return [Math.round(gridSize[0])+1, Math.round(gridSize[1])+1]
 }
 
 export function empty(windowSize: [number, number]): SimulatorMap {
-    const gridSize = calcGridSize(500, windowSize)
+    const gridSize = calcGridSize(300, windowSize)
 
     const materialMap: MaterialMap = {
         permittivity: [],
@@ -39,7 +39,7 @@ export function empty(windowSize: [number, number]): SimulatorMap {
 }
 
 export function doubleSlit(windowSize: [number, number]): SimulatorMap {
-    const gridSize = calcGridSize(500, windowSize)
+    const gridSize = calcGridSize(300, windowSize)
 
     const materialMap: MaterialMap = {
         permittivity: [],
@@ -89,7 +89,7 @@ export function doubleSlit(windowSize: [number, number]): SimulatorMap {
 }
 
 export function fiberOptics(windowSize: [number, number]): SimulatorMap {
-    const gridSize = calcGridSize(500, windowSize)
+    const gridSize = calcGridSize(300, windowSize)
 
     const materialMap: MaterialMap = {
         permittivity: [],
