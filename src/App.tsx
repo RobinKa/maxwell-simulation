@@ -88,7 +88,10 @@ const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
             const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
             const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
 
-            const backgroundX = (Math.abs((1.5 * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((1.5 * y) % 1 - 0.5) < 0.25 ? 1 : 0)
+            const tileFactorX = Math.max(1, gridSize[0] / this.output.x)
+            const tileFactorY = Math.max(1, gridSize[0] / this.output.x)
+
+            const backgroundX = (Math.abs((tileFactorX * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * y) % 1 - 0.5) < 0.25 ? 1 : 0)
             const backgroundY = 1 - backgroundX
 
             const scale = 15
