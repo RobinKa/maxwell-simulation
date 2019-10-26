@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
-import { FDTDSimulator } from "./simulator"
+import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent, ExamplesComponent } from './components'
 import { toggleFullScreen, clamp } from './util'
 import Fullscreen from "./icons/fullscreen.png"
@@ -29,6 +29,7 @@ const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
 const defaultPermittivityBrushValue = 5
 const defaultPermeabilityBrushValue = 1
 const defaultMaterialBrushSize = 5
+const defaultDrawShapeType = "square"
 
 const initialDt = gpuMode === "cpu" ? 0.026 : 0.013
 const initialCellSize = gpuMode === "cpu" ? 0.04 : 0.02
@@ -127,6 +128,7 @@ export default function () {
 
     const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
     const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
+    const [drawShapeType, setDrawShapeType] = useState<DrawShapeType>(defaultDrawShapeType)
 
     const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
     const [permittivityBrushValue, setPermittivityBrushValue] = useState(defaultPermittivityBrushValue)
@@ -159,8 +161,13 @@ export default function () {
             if (mouseDownPos.current !== null) {
                 const center = windowToSimulationPoint(mouseDownPos.current)
                 const brushHalfSize = Math.round(signalBrushSize / 2)
+                const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time)
 
-                simulator.injectSignal(center, brushHalfSize, -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
+                const drawInfo = drawShapeType === "square" ?
+                    makeDrawSquareInfo(center, brushHalfSize, value) :
+                    makeDrawCircleInfo(center, brushHalfSize, value)
+
+                simulator.injectSignal(drawInfo, dt)
             }
 
             for (const source of sources) {
@@ -170,7 +177,7 @@ export default function () {
             simulator.stepMagnetic(dt)
             simulator.stepElectric(dt)
         }
-    }, [simulator, dt, signalFrequency, signalBrushValue, signalBrushSize, sources, windowToSimulationPoint])
+    }, [simulator, dt, signalFrequency, signalBrushValue, signalBrushSize, sources, windowToSimulationPoint, drawShapeType])
 
     useEffect(() => {
         if (simulationSpeed > 0) {
@@ -213,14 +220,21 @@ export default function () {
 
     const changeMaterial = useCallback((canvasPos: [number, number]) => {
         if (simulator) {
-            const centerX = Math.round(gridSize[0] * (canvasPos[0] / windowSize[0]))
-            const centerY = Math.round(gridSize[1] * (canvasPos[1] / windowSize[1]))
+            const center: [number, number] = [
+                Math.round(gridSize[0] * (canvasPos[0] / windowSize[0])),
+                Math.round(gridSize[1] * (canvasPos[1] / windowSize[1]))
+            ]
             const brushHalfSize = Math.round(materialBrushSize / 2)
 
-            simulator.drawPermittivity([centerX, centerY, 0], brushHalfSize, permittivityBrushValue)
-            simulator.drawPermeability([centerX, centerY, 0], brushHalfSize, permeabilityBrushValue)
+            simulator.drawMaterial("permittivity", drawShapeType === "square" ?
+                makeDrawSquareInfo(center, brushHalfSize, permittivityBrushValue) :
+                makeDrawCircleInfo(center, brushHalfSize, permittivityBrushValue))
+
+            simulator.drawMaterial("permeability", drawShapeType === "square" ?
+                makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
+                makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
         }
-    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue])
+    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, drawShapeType])
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
@@ -266,7 +280,7 @@ export default function () {
         }
     }, [clickOption])
 
-    const activeBrushSize = useMemo(() => clickOption === optionSignal ? signalBrushSize : materialBrushSize, [clickOption, signalBrushSize, materialBrushSize])
+    const activeBrushSize = useMemo(() => (clickOption === optionSignal ? signalBrushSize : materialBrushSize) * (canvasSize[0] / gridSize[0]), [clickOption, signalBrushSize, materialBrushSize, canvasSize, gridSize])
 
     return (
         <div style={{ touchAction: "none", userSelect: "none" }}>
@@ -287,8 +301,9 @@ export default function () {
                 <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
             </div>
 
-            {mousePosition &&
-                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (activeBrushSize + 1)), top: mousePosition[1] - (2 * (activeBrushSize + 1)), width: 4 * (activeBrushSize + 1), height: 4 * (activeBrushSize + 1), border: "2px solid yellow" }} />
+            {mousePosition && (drawShapeType === "square" ?
+                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize/2, top: mousePosition[1] - activeBrushSize/2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow" }} /> :
+                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize/2, top: mousePosition[1] - activeBrushSize/2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow", borderRadius: "50%" }} />)
             }
 
             {gpuMode === "cpu" &&
@@ -314,6 +329,7 @@ export default function () {
                         permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
                         signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
                         clickOption={clickOption} setClickOption={setClickOption}
+                        drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
                         resetFields={resetFields} resetMaterials={resetMaterials} />
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Save / Load" initiallyCollapsed={true}>

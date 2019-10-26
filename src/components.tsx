@@ -1,6 +1,6 @@
 import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings } from "./serialization"
-import { FDTDSimulator } from "./simulator"
+import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
 
@@ -269,23 +269,34 @@ export type ControlComponentProps = {
 
     resetFields: () => void
     resetMaterials: () => void
+
+    drawShapeType: DrawShapeType
+    setDrawShapeType: (drawShapeType: DrawShapeType) => void
 }
 
 export function ControlComponent(props: ControlComponentProps) {
     const showSignal = props.clickOption === 1
 
+    const { drawShapeType, setDrawShapeType } = props
+
+    const drawShapeTypeIndex = useMemo(() => drawShapeType === "square" ? 0 : 1, [drawShapeType])
+    const setDrawShapeTypeIndex = useCallback((index: number) => {setDrawShapeType(index === 0 ? "square" : "circle"); console.log(index)}, [setDrawShapeType])
+
+    const brushSizeLabel = useMemo(() => drawShapeType === "square" ? "Brush size" : "Brush radius", [drawShapeType])
+
     return (
         <div style={{ padding: "10px" }}>
             <div style={{ display: showSignal ? undefined : "none" }}>
-                <LabeledSlider label="Brush size" value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
                 <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={500} step={1} />
                 <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             </div>
             <div style={{ display: !showSignal ? undefined : "none" }}>
-                <LabeledSlider label="Brush size" value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label={brushSizeLabel} value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
                 <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
                 <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
             </div>
+            <OptionSelector options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
             <OptionSelector options={["Material", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>
                 <button onClick={props.resetFields} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>

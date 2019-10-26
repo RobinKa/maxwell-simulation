@@ -16,7 +16,7 @@ export function copyTexture(this: IKernelFunctionThis, texture: number[][]) {
     return texture[this.thread.y!][this.thread.x]
 }
 
-export function drawOnTexture(this: IKernelFunctionThis, pos: number[], size: number, value: number, keep: number, texture: number[][]) {
+export function drawSquare(this: IKernelFunctionThis, pos: number[], size: number, value: number, keep: number, texture: number[][]) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -25,6 +25,22 @@ export function drawOnTexture(this: IKernelFunctionThis, pos: number[], size: nu
     const oldValue = getAt(texture, gx, gy, x, y)
 
     const within = Math.max(Math.abs(pos[0] - x), Math.abs(pos[1] - y)) < size
+
+    return within ? value + keep * oldValue : oldValue
+}
+
+export function drawCircle(this: IKernelFunctionThis, pos: number[], radius: number, value: number, keep: number, texture: number[][]) {
+    const x = this.thread.x as number
+    const y = this.thread.y! as number
+    const gx = this.output.x as number
+    const gy = this.output.y as number
+
+    const oldValue = getAt(texture, gx, gy, x, y)
+
+    const dx = pos[0] - x
+    const dy = pos[1] - y
+
+    const within = dx * dx + dy * dy < radius * radius
 
     return within ? value + keep * oldValue : oldValue
 }

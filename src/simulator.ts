@@ -1,6 +1,46 @@
 import { GPU, IKernelRunShortcut, Texture, KernelFunction } from "gpu.js"
 import * as k from "./kernels/simulation"
 
+export type MaterialType = "permittivity" | "permeability"
+
+export type DrawShapeType = "square" | "circle"
+
+type BaseDrawInfo = {
+    drawShape: DrawShapeType
+    center: [number, number]
+    value: number
+}
+
+type DrawSquareInfo = {
+    drawShape: "square"
+    halfSize: number
+} & BaseDrawInfo
+
+type DrawCircleInfo = {
+    drawShape: "circle"
+    radius: number
+} & BaseDrawInfo
+
+export function makeDrawSquareInfo(center: [number, number], halfSize: number, value: number): DrawSquareInfo {
+    return {
+        drawShape: "square",
+        center,
+        halfSize: halfSize,
+        value
+    }
+}
+
+export function makeDrawCircleInfo(center: [number, number], radius: number, value: number): DrawCircleInfo {
+    return {
+        drawShape: "circle",
+        center,
+        radius,
+        value
+    }
+}
+
+export type DrawInfo = DrawSquareInfo | DrawCircleInfo
+
 export type ScalarField2D = {
     values: Texture
     shape: [number, number]
@@ -22,7 +62,7 @@ export interface Simulator {
     stepMagnetic: (dt: number) => void
     resetFields: () => void
     resetMaterials: () => void
-    injectSignal: (pos: [number, number], size: number, value: number, dt: number) => void
+    injectSignal: (drawInfo: DrawInfo, dt: number) => void
     getData: () => SimulationData
 }
 
@@ -49,7 +89,7 @@ export class FDTDSimulator implements Simulator {
     private makeFieldTexture: (name: string) => IKernelRunShortcut
     private copyTexture: (name: string) => IKernelRunShortcut
 
-    private drawOnTexture: (name: string) => IKernelRunShortcut
+    private drawOnTexture: { [shape: string]: (name: string) => IKernelRunShortcut }
 
     private kernels: IKernelRunShortcut[] = []
 
@@ -77,7 +117,11 @@ export class FDTDSimulator implements Simulator {
             permeability: makeField("permeability", 1)
         }
 
-        this.drawOnTexture = memoByName(() => makeKernelWithFuncsAndConsts(k.drawOnTexture))
+        this.drawOnTexture = {
+            "square": memoByName(() => makeKernelWithFuncsAndConsts(k.drawSquare)),
+            "circle": memoByName(() => makeKernelWithFuncsAndConsts(k.drawCircle))
+        }
+
         this.injectSource = makeKernelWithFuncs(k.injectSource)
         this.decaySource = makeKernelWithFuncs(k.decaySource)
 
@@ -165,16 +209,29 @@ export class FDTDSimulator implements Simulator {
         this.data.permittivity.values = this.makeFieldTexture("permittivity")(1) as Texture
     }
 
-    drawPermeability = (pos: [number, number, number], size: number, value: number) => {
-        this.data.permeability.values = this.drawOnTexture("permeability")(pos, size, value, 0, this.copyTexture("permability")(this.data.permeability.values)) as Texture
+    private drawShape = (field: ScalarField2D, fieldName: string, drawInfo: DrawInfo, keep: number) => {
+        const drawFunc = this.drawOnTexture[drawInfo.drawShape](fieldName)
+        const copiedValues = this.copyTexture(fieldName)(field.values)
+
+        switch (drawInfo.drawShape) {
+            case "square":
+                field.values = drawFunc(drawInfo.center, drawInfo.halfSize, drawInfo.value, keep, copiedValues) as Texture
+                break
+            case "circle":
+                field.values = drawFunc(drawInfo.center, drawInfo.radius, drawInfo.value, keep, copiedValues) as Texture
+                break
+            default:
+                throw Error(`Invalid draw shape: ${JSON.stringify(drawInfo)}`)
+        }
     }
 
-    drawPermittivity = (pos: [number, number, number], size: number, value: number) => {
-        this.data.permittivity.values = this.drawOnTexture("permittivity")(pos, size, value, 0, this.copyTexture("permittivity")(this.data.permittivity.values)) as Texture
+    drawMaterial = (materialType: MaterialType, drawInfo: DrawInfo) => {
+        const materialField = materialType === "permeability" ? this.data.permeability : this.data.permittivity
+        this.drawShape(materialField, materialType, drawInfo, 0)
     }
 
-    injectSignal = (pos: [number, number], size: number, value: number, dt: number) => {
-        this.data.electricSourceFieldZ.values = this.drawOnTexture("es2")(pos, size, value * dt, 1, this.copyTexture("es2")(this.data.electricSourceFieldZ.values)) as Texture
+    injectSignal = (drawInfo: DrawInfo, dt: number) => {
+        this.drawShape(this.data.electricSourceFieldZ, "es2", {...drawInfo, value: drawInfo.value * dt}, 1)
     }
 
     loadPermittivity = (permittivity: number[][]) => {

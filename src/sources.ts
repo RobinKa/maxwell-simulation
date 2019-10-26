@@ -1,4 +1,4 @@
-import { Simulator } from "./simulator"
+import { Simulator, makeDrawSquareInfo } from "./simulator"
 
 export interface SignalSource {
     inject(simulator: Simulator, dt: number): void
@@ -13,7 +13,8 @@ export class PointSignalSource implements SignalSource {
         const t = simulator.getData().time
         if (t >= 0 && (this.turnOffTime === undefined || t <= this.turnOffTime)) {
             const amplitude = -this.amplitude * Math.cos(2 * Math.PI * this.frequency * t)
-            simulator.injectSignal(this.position, 1, amplitude, dt)
+            const drawInfo = makeDrawSquareInfo(this.position, 1, amplitude)
+            simulator.injectSignal(drawInfo, dt)
         }
     }
 }
