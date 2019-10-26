@@ -283,6 +283,7 @@ export default function () {
             />
 
             <div style={{ position: "absolute", bottom: 10, right: 10 }}>
+                <a href="mailto:tora@warlock.ai?subject=EM simulation feedback" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none", marginRight: "8px" }}>Feedback</a>
                 <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
             </div>
 
