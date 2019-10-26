@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent, ExamplesComponent } from './components'
-import { toggleFullScreen, clamp } from './util'
+import { toggleFullScreen, clamp, QualityPreset } from './util'
 import Fullscreen from "./icons/fullscreen.png"
 import "./App.css"
 import { SignalSource } from './sources'
@@ -20,8 +20,37 @@ function getGpuMode(): GPUMode | GPUInternalMode {
     return "cpu"
 }
 
+const qualityPresets: { [presetName: string]: QualityPreset } = {
+    "Low": {
+        dt: 0.013 * 2,
+        cellSize: 0.02 * 2,
+        resolutionScale: 0.3,
+        gridSizeLongest: 400/2
+    },
+    "Medium": {
+        dt: 0.013,
+        cellSize: 0.02,
+        resolutionScale: 1,
+        gridSizeLongest: 400
+    },
+    "High": {
+        dt: 0.013 / 2,
+        cellSize: 0.02 / 2,
+        resolutionScale: 1,
+        gridSizeLongest: 400 * 2
+    },
+    "Ultra": {
+        dt: 0.013 / 4,
+        cellSize: 0.02 / 4,
+        resolutionScale: 1,
+        gridSizeLongest: 400 * 4
+    }
+}
+
 const gpuMode = getGpuMode()
 console.log(`Using GPU mode ${gpuMode}`)
+
+const defaultPreset = gpuMode === "cpu" ? qualityPresets["Low"] : qualityPresets["Medium"]
 
 const defaultSignalBrushValue = gpuMode === "cpu" ? 5 : 50
 const defaultSignalBrushSize = 1
@@ -31,11 +60,11 @@ const defaultPermeabilityBrushValue = 1
 const defaultMaterialBrushSize = 5
 const defaultDrawShapeType = "square"
 
-const initialDt = gpuMode === "cpu" ? 0.026 : 0.013
-const initialCellSize = gpuMode === "cpu" ? 0.04 : 0.02
+const initialDt = defaultPreset.dt
+const initialCellSize = defaultPreset.cellSize
 const initialSimulationSpeed = 1
-const initialGridSizeLongest = gpuMode === "cpu" ? 200 : 400
-const initialResolutionScale = gpuMode === "cpu" ? 0.3 : 1
+const initialGridSizeLongest = defaultPreset.gridSizeLongest
+const initialResolutionScale = defaultPreset.resolutionScale
 const initialWindowSize: [number, number] = [window.innerWidth, window.innerHeight]
 const initialCanvasSize: [number, number] = calculateCanvasSize(initialWindowSize, initialResolutionScale)
 const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
@@ -302,8 +331,8 @@ export default function () {
             </div>
 
             {mousePosition && (drawShapeType === "square" ?
-                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize/2, top: mousePosition[1] - activeBrushSize/2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow" }} /> :
-                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize/2, top: mousePosition[1] - activeBrushSize/2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow", borderRadius: "50%" }} />)
+                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow" }} /> :
+                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow", borderRadius: "50%" }} />)
             }
 
             {gpuMode === "cpu" &&
@@ -342,7 +371,8 @@ export default function () {
                         resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
                         cellSize={cellSize} setCellSize={setCellSize}
                         reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
-                        dt={dt} setDt={setDt} />
+                        dt={dt} setDt={setDt}
+                        qualityPresets={qualityPresets} />
                 </CollapsibleContainer>
             </CollapsibleContainer>
         </div>

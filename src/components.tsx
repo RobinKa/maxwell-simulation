@@ -3,6 +3,7 @@ import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings 
 import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
+import { QualityPreset } from "./util"
 
 export type CollapsibleContainerProps = {
     children: ReactElement<any> | ReactElement<any>[] | null
@@ -65,10 +66,11 @@ export function LabeledSlider(props: LabeledSliderProps) {
     return (
         <div>
             <label>{props.label}</label>
+            {allowNegative && <>
+                <input style={{marginLeft: "10px"}} type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} /><label>Negative</label>
+            </>}
             <div>
-                {allowNegative && <>
-                    <input type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} /><label>Negative</label>
-                </>}
+                
                 <input type="range" ref={rangeSliderRef} min={props.min} max={props.max} value={absValue} step={props.step}
                     onChange={updateValue} style={{ height: 10, width: "100%" }} />
                 <div style={{ textAlign: "center", lineHeight: 0.2, marginBottom: "7px" }}>
@@ -83,21 +85,23 @@ export type OptionSelectorProps = {
     options: string[]
     selectedOption: number
     setSelectedOption: (selectedOption: number) => void
-    buttonClassName?: string
+    style?: React.CSSProperties
+    buttonStyle?: React.CSSProperties
 }
 
 export function OptionSelector(props: OptionSelectorProps) {
     return (
-        <div style={{ margin: "10px" }}>
+        <div style={props.style}>
             {props.options.map((option, optionIndex) =>
-                <button className={props.buttonClassName} key={option} style={{
+                <button key={option} style={{
                     backgroundColor: "rgb(50, 50, 50)",
                     color: "white",
                     border: optionIndex === props.selectedOption ? "3px solid rgb(0, 150, 255)" : "0",
                     height: "30px",
                     width: "70px",
                     overflow: "hidden",
-                    textOverflow: "hidden"
+                    textOverflow: "hidden",
+                    ...props.buttonStyle
                 }}
                     onClick={e => props.setSelectedOption(optionIndex)}>
                     {option}
@@ -230,11 +234,31 @@ export type SettingsComponentProps = {
 
     reflectiveBoundary: boolean
     setReflectiveBoundary: (reflectiveBoundary: boolean) => void
+
+    qualityPresets: { [presetName: string]: QualityPreset }
 }
 
 export function SettingsComponent(props: SettingsComponentProps) {
+    const { qualityPresets, setCellSize, setGridSizeLongest, setResolutionScale, setDt } = props
+
+    const onPresetClicked = useCallback((preset: QualityPreset) => {
+        setCellSize(preset.cellSize)
+        setGridSizeLongest(preset.gridSizeLongest)
+        setResolutionScale(preset.resolutionScale)
+        setDt(preset.dt)
+    }, [setCellSize, setGridSizeLongest, setResolutionScale, setDt])
+
     return (
         <div style={{ padding: "10px" }}>
+            <div>Quality presets</div>
+            <div>
+                {Object.keys(qualityPresets).map(presetName =>
+                    <button key={presetName} onClick={_ => onPresetClicked(qualityPresets[presetName])}
+                        style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>
+                        {presetName}
+                    </button>
+                )}
+            </div>
             <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
             <LabeledSlider label="Time step size" value={props.dt} setValue={props.setDt} min={0.001} max={0.1} step={0.001} allowNegative={true} />
             <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.002} max={0.2} step={0.001} />
@@ -286,6 +310,7 @@ export function ControlComponent(props: ControlComponentProps) {
 
     return (
         <div style={{ padding: "10px" }}>
+            <OptionSelector buttonStyle={{height: "24px"}} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
             <div style={{ display: showSignal ? undefined : "none" }}>
                 <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
                 <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={500} step={1} />
@@ -296,8 +321,7 @@ export function ControlComponent(props: ControlComponentProps) {
                 <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
                 <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
             </div>
-            <OptionSelector options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
-            <OptionSelector options={["Material", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+            <OptionSelector style={{ margin: "10px" }} options={["Material", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>
                 <button onClick={props.resetFields} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>
                 <button onClick={props.resetMaterials} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset materials</button>
