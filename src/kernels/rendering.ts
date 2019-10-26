@@ -77,7 +77,7 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const tileFactorX = Math.max(1, gridSize[0] / this.output.x)
     const tileFactorY = Math.max(1, gridSize[1] / this.output.y!)
 
-    const backgroundX = (Math.abs((tileFactorX * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * y) % 1 - 0.5) < 0.25 ? 1 : 0)
+    const backgroundX = (Math.abs((tileFactorX * fx) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * fy) % 1 - 0.5) < 0.25 ? 1 : 0)
     const backgroundY = 1 - backgroundX
 
     const scale = 15
