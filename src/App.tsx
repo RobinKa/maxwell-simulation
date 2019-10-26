@@ -52,7 +52,7 @@ console.log(`Using GPU mode ${gpuMode}`)
 
 const defaultPreset = gpuMode === "cpu" ? qualityPresets["Low"] : qualityPresets["Medium"]
 
-const defaultSignalBrushValue = gpuMode === "cpu" ? 5 : 50
+const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
 const defaultPermittivityBrushValue = 5
@@ -229,9 +229,9 @@ export default function () {
 
             renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
                 simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
-                simData.permittivity.values, simData.permeability.values, gridSize)
+                simData.permittivity.values, simData.permeability.values, gridSize, cellSize)
         }
-    }, [simulator, renderSim, gridSize, resolutionScale, drawCanvasRef])
+    }, [simulator, renderSim, gridSize, cellSize, resolutionScale, drawCanvasRef])
 
     useEffect(() => {
         let stop = false

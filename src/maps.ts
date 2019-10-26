@@ -30,16 +30,18 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
 
     const slitCenterX = Math.round(0.75 * simulationSettings.gridSize[0])
 
+    const slitSize = 0.2 / simulationSettings.cellSize
+
     for (let y = 0; y < simulationSettings.gridSize[1]; y++) {
         const isWallRow = Math.abs(y - simulationSettings.gridSize[1] / 5) < 2
         const permittivityRow = new Array(simulationSettings.gridSize[0]).fill(isWallRow ? 100 : 1)
 
         if (isWallRow) {
-            for (let x = slitCenterX - 20; x < slitCenterX - 10; x++) {
+            for (let x = slitCenterX - slitSize * 2; x < slitCenterX - slitSize; x++) {
                 permittivityRow[x] = 1
             }
 
-            for (let x = slitCenterX + 20; x > slitCenterX + 10; x--) {
+            for (let x = slitCenterX + slitSize * 2; x > slitCenterX + slitSize; x--) {
                 permittivityRow[x] = 1
             }
         }
@@ -50,7 +52,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
-        amplitude: 150000,
+        amplitude: 30000,
         frequency: 3,
         position: [Math.round(slitCenterX), Math.round(simulationSettings.gridSize[1] / 15)]
     }]
@@ -82,7 +84,7 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
     }
 
     const numPoints = 100
-    const thickness = 2
+    const thickness = 0.04 / simulationSettings.cellSize
     for (let t = 0; t < numPoints; t++) {
         const pos = getCurvePoint(t / numPoints)
 
@@ -99,13 +101,13 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
-        amplitude: 40000,
+        amplitude: 8000,
         frequency: 5,
         position: [endPoint[0] - 1, endPoint[1]],
         turnOffTime: 0.5
     }, {
         type: "point",
-        amplitude: 40000,
+        amplitude: 8000,
         frequency: 5,
         position: [endPoint[0] + 2, endPoint[1]],
         turnOffTime: 0.5
@@ -144,7 +146,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
-        amplitude: 100000,
+        amplitude: 20000,
         frequency: 2,
         position: [Math.round(simulationSettings.gridSize[0] / 10), Math.round(simulationSettings.gridSize[1] / 2)],
         turnOffTime: 0.5

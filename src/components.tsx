@@ -67,10 +67,9 @@ export function LabeledSlider(props: LabeledSliderProps) {
         <div>
             <label>{props.label}</label>
             {allowNegative && <>
-                <input style={{marginLeft: "10px"}} type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} /><label>Negative</label>
+                <input style={{ marginLeft: "10px" }} type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} /><label>Negative</label>
             </>}
             <div>
-                
                 <input type="range" ref={rangeSliderRef} min={props.min} max={props.max} value={absValue} step={props.step}
                     onChange={updateValue} style={{ height: 10, width: "100%" }} />
                 <div style={{ textAlign: "center", lineHeight: 0.2, marginBottom: "7px" }}>
@@ -310,10 +309,10 @@ export function ControlComponent(props: ControlComponentProps) {
 
     return (
         <div style={{ padding: "10px" }}>
-            <OptionSelector buttonStyle={{height: "24px"}} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
+            <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
             <div style={{ display: showSignal ? undefined : "none" }}>
                 <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
-                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={500} step={1} />
+                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={100} step={1} />
                 <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             </div>
             <div style={{ display: !showSignal ? undefined : "none" }}>
