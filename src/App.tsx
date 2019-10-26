@@ -1,11 +1,12 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { GPU, GPUMode, GPUInternalMode, IKernelRunShortcut } from "gpu.js"
+import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
 import { FDTDSimulator } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent, ExamplesComponent } from './components'
-import { toggleFullScreen } from './util'
+import { toggleFullScreen, clamp } from './util'
 import Fullscreen from "./icons/fullscreen.png"
 import "./App.css"
 import { SignalSource } from './sources'
+import * as k from './kernels/rendering'
 
 function getGpuMode(): GPUMode | GPUInternalMode {
     if (GPU.isSinglePrecisionSupported) {
@@ -50,103 +51,9 @@ function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]
         [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
 }
 
-const makeRenderSimulatorCanvas = (g: GPU, canvasSize: [number, number]) => {
-    function getAt(field: number[][], shapeX: number, shapeY: number, x: number, y: number) {
-        if (x < 0 || x >= shapeX || y < 0 || y >= shapeY) {
-            return 0
-        }
-
-        return field[y][x]
-    }
-
-    let kernel: IKernelRunShortcut
-
-    // On CPU we can't use float indices so round the coordinates
-    if (gpuMode !== "cpu") {
-        kernel = g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-            magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-            permittivity: number[][], permeability: number[][], gridSize: number[]) {
-            const gx = gridSize[0]
-            const gy = gridSize[1]
-
-            const x = gx * this.thread.x! / (this.output.x as number)
-            const y = gy * (1 - this.thread.y! / (this.output.y as number))
-
-            const eAA =
-                getAt(electricFieldX, gx, gy, x, y) * getAt(electricFieldX, gx, gy, x, y) +
-                getAt(electricFieldY, gx, gy, x, y) * getAt(electricFieldY, gx, gy, x, y) +
-                getAt(electricFieldZ, gx, gy, x, y) * getAt(electricFieldZ, gx, gy, x, y)
-
-            // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
-            const magXAA = getAt(magneticFieldX, gx, gy, x - 0.5, y - 0.5)
-            const magYAA = getAt(magneticFieldY, gx, gy, x - 0.5, y - 0.5)
-            const magZAA = getAt(magneticFieldZ, gx, gy, x - 0.5, y - 0.5)
-
-            const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
-
-            // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * x)
-            const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
-            const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
-
-            const tileFactorX = Math.max(1, gridSize[0] / this.output.x)
-            const tileFactorY = Math.max(1, gridSize[1] / this.output.y!)
-
-            const backgroundX = (Math.abs((tileFactorX * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * y) % 1 - 0.5) < 0.25 ? 1 : 0)
-            const backgroundY = 1 - backgroundX
-
-            const scale = 15
-            this.color(
-                Math.min(1, eAA / scale + 0.8 * backgroundX * permittivityValue),
-                Math.min(1, eAA / scale + mAA / scale),
-                Math.min(1, mAA / scale + 0.8 * backgroundY * permeabilityValue))
-        })
-    } else {
-        kernel = g.createKernel(function (electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-            magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-            permittivity: number[][], permeability: number[][], gridSize: number[]) {
-            const gx = gridSize[0]
-            const gy = gridSize[1]
-
-            const fx = gx * this.thread.x! / (this.output.x as number)
-            const fy = gy * (1 - this.thread.y! / (this.output.y as number))
-            const x = Math.round(fx)
-            const y = Math.round(fy)
-
-            const eAA =
-                getAt(electricFieldX, gx, gy, x, y) * getAt(electricFieldX, gx, gy, x, y) +
-                getAt(electricFieldY, gx, gy, x, y) * getAt(electricFieldY, gx, gy, x, y) +
-                getAt(electricFieldZ, gx, gy, x, y) * getAt(electricFieldZ, gx, gy, x, y)
-
-            // Magnetic field is offset from electric field, so get value at +0.5 by interpolating 0 and 1
-            const magXAA = getAt(magneticFieldX, gx, gy, x, y)
-            const magYAA = getAt(magneticFieldY, gx, gy, x, y)
-            const magZAA = getAt(magneticFieldZ, gx, gy, x, y)
-
-            const mAA = magXAA * magXAA + magYAA * magYAA + magZAA * magZAA
-
-            // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * x)
-            const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
-            const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
-
-            const tileFactorX = Math.max(1, gridSize[0] / this.output.x)
-            const tileFactorY = Math.max(1, gridSize[1] / this.output.y!)
-
-            const backgroundX = (Math.abs((tileFactorX * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * y) % 1 - 0.5) < 0.25 ? 1 : 0)
-            const backgroundY = 1 - backgroundX
-
-            const scale = 15
-            this.color(
-                Math.min(1, eAA / scale + 0.8 * backgroundX * permittivityValue),
-                Math.min(1, eAA / scale + mAA / scale),
-                Math.min(1, mAA / scale + 0.8 * backgroundY * permeabilityValue))
-        })
-    }
-
-    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
-}
-
-function clamp(min: number, max: number, value: number) {
-    return Math.max(min, Math.min(max, value))
+const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
+    const kernel = gpuMode !== "cpu" ? gpu.createKernel(k.drawGpu) : gpu.createKernel(k.drawCpu)
+    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([k.getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
 export default function () {
@@ -416,7 +323,7 @@ export default function () {
             }
 
             {gpuMode === "cpu" &&
-                <div style={{position: "absolute", pointerEvents: "none", left: 10, bottom: 10, color: "red", fontWeight: "lighter"}}>Using CPU (WebGL with float textures unsupported by your device)</div>
+                <div style={{ position: "absolute", pointerEvents: "none", left: 10, bottom: 10, color: "red", fontWeight: "lighter" }}>Using CPU (WebGL with float textures unsupported by your device)</div>
             }
 
             <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{ position: "absolute", right: 10, top: 10, cursor: "pointer" }} />

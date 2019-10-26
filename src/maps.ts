@@ -118,7 +118,6 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
     }
 }
 
-
 export function lens(simulationSettings: SimulationSettings): SimulatorMap {
     const materialMap: MaterialMap = {
         permittivity: [],
