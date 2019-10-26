@@ -189,8 +189,8 @@ export default function () {
             const simData = simulator.getData()
 
             if (simData.time > 0) {
-                renderSim(simData.electricFieldX.values, simData.electricFieldY.values, simData.electricFieldZ.values,
-                    simData.magneticFieldX.values, simData.magneticFieldY.values, simData.magneticFieldZ.values,
+                renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
+                    simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
                     simData.permittivity.values, simData.permeability.values, gridSize)
             }
         }
