@@ -280,7 +280,7 @@ export function ControlComponent(props: ControlComponentProps) {
     const { drawShapeType, setDrawShapeType } = props
 
     const drawShapeTypeIndex = useMemo(() => drawShapeType === "square" ? 0 : 1, [drawShapeType])
-    const setDrawShapeTypeIndex = useCallback((index: number) => {setDrawShapeType(index === 0 ? "square" : "circle"); console.log(index)}, [setDrawShapeType])
+    const setDrawShapeTypeIndex = useCallback((index: number) => setDrawShapeType(index === 0 ? "square" : "circle"), [setDrawShapeType])
 
     const brushSizeLabel = useMemo(() => drawShapeType === "square" ? "Brush size" : "Brush radius", [drawShapeType])
 
