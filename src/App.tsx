@@ -26,7 +26,8 @@ console.log(`Using GPU mode ${gpuMode}`)
 const defaultSignalBrushValue = gpuMode === "cpu" ? 5 : 50
 const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
-const defaultMaterialBrushValue = 5
+const defaultPermittivityBrushValue = 5
+const defaultPermeabilityBrushValue = 1
 const defaultMaterialBrushSize = 5
 
 const initialDt = gpuMode === "cpu" ? 0.026 : 0.013
@@ -124,15 +125,17 @@ export default function () {
         }
     }, [simulator, reflectiveBoundary])
 
-    const [brushSize, setBrushSize] = useState(defaultSignalBrushSize)
-    const [brushValue, setBrushValue] = useState(defaultSignalBrushValue)
+    const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
+    const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
+
+    const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
+    const [permittivityBrushValue, setPermittivityBrushValue] = useState(defaultPermittivityBrushValue)
+    const [permeabilityBrushValue, setPermeabilityBrushValue] = useState(defaultPermeabilityBrushValue)
     const [signalFrequency, setSignalFrequency] = useState(defaultSignalFrequency)
-    const [drawingPermeability, setDrawingPermeability] = useState(false)
-    const [drawingPermittivity, setDrawingPermittivity] = useState(false)
-    const [clickOption, setClickOption] = useState(2) // eps, mu, signal
-    const optionPermittivityBrush = 0
-    const optionPermeabilityBrush = 1
-    const optionSignal = 2
+    const [drawingMaterial, setDrawingMaterial] = useState(false)
+    const optionMaterialBrush = 0
+    const optionSignal = 1
+    const [clickOption, setClickOption] = useState(optionSignal) // material, signal
 
     const [mousePosition, setMousePosition] = useState<[number, number] | null>(null)
 
@@ -155,9 +158,9 @@ export default function () {
 
             if (mouseDownPos.current !== null) {
                 const center = windowToSimulationPoint(mouseDownPos.current)
-                const brushHalfSize = Math.round(brushSize / 2)
+                const brushHalfSize = Math.round(signalBrushSize / 2)
 
-                simulator.injectSignal(center, brushHalfSize, -brushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
+                simulator.injectSignal(center, brushHalfSize, -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time), dt)
             }
 
             for (const source of sources) {
@@ -167,7 +170,7 @@ export default function () {
             simulator.stepMagnetic(dt)
             simulator.stepElectric(dt)
         }
-    }, [simulator, dt, signalFrequency, brushValue, brushSize, sources, windowToSimulationPoint])
+    }, [simulator, dt, signalFrequency, signalBrushValue, signalBrushSize, sources, windowToSimulationPoint])
 
     useEffect(() => {
         if (simulationSpeed > 0) {
@@ -188,11 +191,9 @@ export default function () {
 
             const simData = simulator.getData()
 
-            if (simData.time > 0) {
-                renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
-                    simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
-                    simData.permittivity.values, simData.permeability.values, gridSize)
-            }
+            renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
+                simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
+                simData.permittivity.values, simData.permeability.values, gridSize)
         }
     }, [simulator, renderSim, gridSize, resolutionScale, drawCanvasRef])
 
@@ -210,20 +211,16 @@ export default function () {
         return () => { stop = true }
     }, [drawStep])
 
-    const changeMaterial = useCallback((canvasPos: [number, number], material: "permittivity" | "permeability") => {
+    const changeMaterial = useCallback((canvasPos: [number, number]) => {
         if (simulator) {
             const centerX = Math.round(gridSize[0] * (canvasPos[0] / windowSize[0]))
             const centerY = Math.round(gridSize[1] * (canvasPos[1] / windowSize[1]))
-            const brushHalfSize = Math.round(brushSize / 2)
+            const brushHalfSize = Math.round(materialBrushSize / 2)
 
-            if (material === "permittivity") {
-                simulator.drawPermittivity([centerX, centerY, 0], brushHalfSize, brushValue)
-            } else {
-                simulator.drawPermeability([centerX, centerY, 0], brushHalfSize, brushValue)
-            }
-
+            simulator.drawPermittivity([centerX, centerY, 0], brushHalfSize, permittivityBrushValue)
+            simulator.drawPermeability([centerX, centerY, 0], brushHalfSize, permeabilityBrushValue)
         }
-    }, [simulator, gridSize, windowSize, brushSize, brushValue])
+    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue])
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
@@ -242,12 +239,9 @@ export default function () {
         if (simulator) {
             if (clickOption === optionSignal) {
                 mouseDownPos.current = [clientX, clientY]
-            } else if (clickOption === optionPermittivityBrush) {
-                changeMaterial([clientX, clientY], "permittivity")
-                setDrawingPermittivity(true)
-            } else if (clickOption === optionPermeabilityBrush) {
-                changeMaterial([clientX, clientY], "permeability")
-                setDrawingPermeability(true)
+            } else if (clickOption === optionMaterialBrush) {
+                changeMaterial([clientX, clientY])
+                setDrawingMaterial(true)
             }
         }
     }, [simulator, changeMaterial, clickOption])
@@ -258,47 +252,21 @@ export default function () {
                 mouseDownPos.current = [clientX, clientY]
             }
 
-            if (drawingPermittivity) {
-                changeMaterial([clientX, clientY], "permittivity")
-            }
-
-            if (drawingPermeability) {
-                changeMaterial([clientX, clientY], "permeability")
+            if (drawingMaterial) {
+                changeMaterial([clientX, clientY])
             }
         }
-    }, [simulator, changeMaterial, clickOption, drawingPermeability, drawingPermittivity])
+    }, [simulator, changeMaterial, clickOption, drawingMaterial])
 
     const onInputUp = useCallback(() => {
         if (clickOption === optionSignal) {
             mouseDownPos.current = null
-        } else if (clickOption === optionPermeabilityBrush) {
-            setDrawingPermeability(false)
-        } else if (clickOption === optionPermittivityBrush) {
-            setDrawingPermittivity(false)
+        } else if (clickOption === optionMaterialBrush) {
+            setDrawingMaterial(false)
         }
     }, [clickOption])
 
-    // Remember old brush values for signal and material
-    const [previousClickOption, setPreviousClickOption] = useState(optionSignal)
-    const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
-    const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
-    const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
-    const [materialBrushValue, setMaterialBrushValue] = useState(defaultMaterialBrushValue)
-    useEffect(() => {
-        if (clickOption === optionSignal && previousClickOption !== optionSignal) {
-            setMaterialBrushSize(brushSize)
-            setMaterialBrushValue(brushValue)
-            setBrushSize(signalBrushSize)
-            setBrushValue(signalBrushValue)
-        } else if (clickOption !== optionSignal && previousClickOption === optionSignal) {
-            setSignalBrushSize(brushSize)
-            setSignalBrushValue(brushValue)
-            setBrushSize(materialBrushSize)
-            setBrushValue(materialBrushValue)
-        }
-
-        setPreviousClickOption(clickOption)
-    }, [clickOption, previousClickOption, signalBrushSize, signalBrushValue, materialBrushSize, materialBrushValue, brushSize, brushValue])
+    const activeBrushSize = useMemo(() => clickOption === optionSignal ? signalBrushSize : materialBrushSize, [clickOption, signalBrushSize, materialBrushSize])
 
     return (
         <div style={{ touchAction: "none", userSelect: "none" }}>
@@ -319,7 +287,7 @@ export default function () {
             </div>
 
             {mousePosition &&
-                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (brushSize + 1)), top: mousePosition[1] - (2 * (brushSize + 1)), width: 4 * (brushSize + 1), height: 4 * (brushSize + 1), border: "2px solid yellow" }} />
+                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - (2 * (activeBrushSize + 1)), top: mousePosition[1] - (2 * (activeBrushSize + 1)), width: 4 * (activeBrushSize + 1), height: 4 * (activeBrushSize + 1), border: "2px solid yellow" }} />
             }
 
             {gpuMode === "cpu" &&
@@ -338,8 +306,11 @@ export default function () {
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Controls">
                     <ControlComponent
-                        brushSize={brushSize} setBrushSize={setBrushSize}
-                        brushValue={brushValue} setBrushValue={setBrushValue}
+                        signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
+                        materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
+                        signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
+                        permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
+                        permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
                         signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
                         clickOption={clickOption} setClickOption={setClickOption}
                         resetFields={resetFields} resetMaterials={resetMaterials} />

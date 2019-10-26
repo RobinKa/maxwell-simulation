@@ -1,4 +1,4 @@
-import React, { ReactElement, useState, useCallback, useMemo } from "react"
+import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings } from "./serialization"
 import { FDTDSimulator } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
@@ -34,17 +34,45 @@ export type LabeledSliderProps = {
     min: number
     max: number
     step: number
+    allowNegative?: boolean
+    logarithmic?: boolean
+    displayDigits?: number
 }
 
 export function LabeledSlider(props: LabeledSliderProps) {
+    const { value, setValue, allowNegative, logarithmic, displayDigits } = props
+    const absValue = logarithmic ? Math.log2(Math.abs(value)) : Math.abs(value)
+
+    const [negative, setNegative] = useState(value < 0)
+
+    const rangeSliderRef = useRef<HTMLInputElement>(null)
+
+    const updateValue = useCallback(() => {
+        if (rangeSliderRef.current) {
+            let newValue = parseFloat(rangeSliderRef.current.value)
+            if (logarithmic) {
+                newValue = Math.pow(2, newValue)
+            }
+
+            setValue((negative ? -1 : 1) * newValue)
+        }
+    }, [setValue, negative, logarithmic, rangeSliderRef])
+
+    useEffect(() => updateValue(), [negative, updateValue])
+
+    const displayValue = (displayDigits !== undefined) ? value.toFixed(displayDigits) : value
+
     return (
         <div>
             <label>{props.label}</label>
             <div>
-                <input type="range" min={props.min} max={props.max} value={props.value} step={props.step}
-                    onChange={e => props.setValue(parseFloat(e.target.value))} style={{ height: 10, width: "100%" }} />
+                {allowNegative && <>
+                    <input type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} /><label>Negative</label>
+                </>}
+                <input type="range" ref={rangeSliderRef} min={props.min} max={props.max} value={absValue} step={props.step}
+                    onChange={updateValue} style={{ height: 10, width: "100%" }} />
                 <div style={{ textAlign: "center", lineHeight: 0.2, marginBottom: "7px" }}>
-                    {props.value}
+                    {displayValue}
                 </div>
             </div>
         </div>
@@ -208,7 +236,7 @@ export function SettingsComponent(props: SettingsComponentProps) {
     return (
         <div style={{ padding: "10px" }}>
             <LabeledSlider label="Grid length" value={props.gridSizeLongest} setValue={props.setGridSizeLongest} min={100} max={2000} step={100} />
-            <LabeledSlider label="Time step size" value={props.dt} setValue={props.setDt} min={0.001} max={0.1} step={0.001} />
+            <LabeledSlider label="Time step size" value={props.dt} setValue={props.setDt} min={0.001} max={0.1} step={0.001} allowNegative={true} />
             <LabeledSlider label="Cell size" value={props.cellSize} setValue={props.setCellSize} min={0.002} max={0.2} step={0.001} />
             <LabeledSlider label="Resolution scale" value={props.resolutionScale} setValue={props.setResolutionScale} min={0.1} max={2} step={0.1} />
             <LabeledSlider label="Simulation speed" value={props.simulationSpeed} setValue={props.setSimulationSpeed} min={0} max={10} step={0.1} />
@@ -218,11 +246,20 @@ export function SettingsComponent(props: SettingsComponentProps) {
 }
 
 export type ControlComponentProps = {
-    brushSize: number,
-    setBrushSize: (brushSize: number) => void
+    signalBrushSize: number,
+    setSignalBrushSize: (brushSize: number) => void
 
-    brushValue: number
-    setBrushValue: (brushValue: number) => void
+    signalBrushValue: number
+    setSignalBrushValue: (brushValue: number) => void
+
+    materialBrushSize: number,
+    setMaterialBrushSize: (brushSize: number) => void
+
+    permeabilityBrushValue: number
+    setPermeabilityBrushValue: (brushValue: number) => void
+
+    permittivityBrushValue: number
+    setPermittivityBrushValue: (brushValue: number) => void
 
     signalFrequency: number,
     setSignalFrequency: (signalFrequency: number) => void
@@ -235,12 +272,21 @@ export type ControlComponentProps = {
 }
 
 export function ControlComponent(props: ControlComponentProps) {
+    const showSignal = props.clickOption === 1
+
     return (
         <div style={{ padding: "10px" }}>
-            <LabeledSlider label="Brush size" value={props.brushSize} setValue={props.setBrushSize} min={1} max={100} step={1} />
-            <LabeledSlider label="Brush value" value={props.brushValue} setValue={props.setBrushValue} min={1} max={255} step={1} />
-            <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
-            <OptionSelector options={["ε-Brush", "µ-Brush", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+            <div style={{ display: showSignal ? undefined : "none" }}>
+                <LabeledSlider label="Brush size" value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={500} step={1} />
+                <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
+            </div>
+            <div style={{ display: !showSignal ? undefined : "none" }}>
+                <LabeledSlider label="Brush size" value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
+                <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
+            </div>
+            <OptionSelector options={["Material", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
             <div>
                 <button onClick={props.resetFields} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>
                 <button onClick={props.resetMaterials} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset materials</button>
