@@ -269,13 +269,13 @@ export function SettingsComponent(props: SettingsComponentProps) {
 }
 
 export type ControlComponentProps = {
-    signalBrushSize: number,
+    signalBrushSize: number
     setSignalBrushSize: (brushSize: number) => void
 
     signalBrushValue: number
     setSignalBrushValue: (brushValue: number) => void
 
-    materialBrushSize: number,
+    materialBrushSize: number
     setMaterialBrushSize: (brushSize: number) => void
 
     permeabilityBrushValue: number
@@ -284,7 +284,7 @@ export type ControlComponentProps = {
     permittivityBrushValue: number
     setPermittivityBrushValue: (brushValue: number) => void
 
-    signalFrequency: number,
+    signalFrequency: number
     setSignalFrequency: (signalFrequency: number) => void
 
     clickOption: number
@@ -295,6 +295,9 @@ export type ControlComponentProps = {
 
     drawShapeType: DrawShapeType
     setDrawShapeType: (drawShapeType: DrawShapeType) => void
+
+    snapInput: boolean
+    setSnapInput: (snapInput: boolean) => void
 }
 
 export function ControlComponent(props: ControlComponentProps) {
@@ -309,6 +312,7 @@ export function ControlComponent(props: ControlComponentProps) {
 
     return (
         <div style={{ padding: "10px" }}>
+            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to line</label>
             <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
             <div style={{ display: showSignal ? undefined : "none" }}>
                 <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />

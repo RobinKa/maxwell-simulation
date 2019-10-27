@@ -25,7 +25,7 @@ const qualityPresets: { [presetName: string]: QualityPreset } = {
         dt: 0.013 * 2,
         cellSize: 0.02 * 2,
         resolutionScale: 0.3,
-        gridSizeLongest: 400/2
+        gridSizeLongest: 400 / 2
     },
     "Medium": {
         dt: 0.013,
@@ -173,6 +173,11 @@ export default function () {
     const signalStrength = useRef(0)
     const mouseDownPos = useRef<[number, number] | null>(null)
 
+    // Snap input across a line
+    const [snapInput, setSnapInput] = useState(false)
+    const [inputStartPos, setInputStartPos] = useState<[number, number] | null>(null)
+    const [inputDir, setInputDir] = useState<[number, number] | null>(null)
+
     const windowToSimulationPoint = useMemo(() => {
         return (windowPoint: [number, number]) => {
             const simulationPoint: [number, number] = [
@@ -278,28 +283,51 @@ export default function () {
         }
     }, [simulator])
 
-    const onInputDown = useCallback(([clientX, clientY]: [number, number]) => {
+    const onInputDown = useCallback((clientPos: [number, number]) => {
         if (simulator) {
+            setInputStartPos(clientPos)
+
             if (clickOption === optionSignal) {
-                mouseDownPos.current = [clientX, clientY]
+                mouseDownPos.current = clientPos
             } else if (clickOption === optionMaterialBrush) {
-                changeMaterial([clientX, clientY])
+                changeMaterial(clientPos)
                 setDrawingMaterial(true)
             }
         }
     }, [simulator, changeMaterial, clickOption])
 
-    const onInputMove = useCallback(([clientX, clientY]: [number, number]) => {
+    const onInputMove = useCallback((clientPos: [number, number], shiftDown?: boolean) => {
         if (simulator) {
+            let pos: [number, number] = clientPos
+
+            // If snapping, change the position to lie along the draw line
+            if ((snapInput || shiftDown) && inputStartPos) {
+                const offset = [pos[0] - inputStartPos[0], pos[1] - inputStartPos[1]]
+                if (inputDir) {
+                    const projection = offset[0] * inputDir[0] + offset[1] * inputDir[1]
+                    pos = [inputStartPos[0] + projection * inputDir[0], inputStartPos[1] + projection * inputDir[1]]
+                } else {
+                    const offsetLengthSq = offset[0] * offset[0] + offset[1] * offset[1]
+                    const minimumSnapLengthSq = 0.01 * 0.01 * (windowSize[0] * windowSize[0] + windowSize[1] * windowSize[1])
+                    if (offsetLengthSq > minimumSnapLengthSq) {
+                        // Snap to 10° angles
+                        const angle = Math.atan2(offset[1], offset[0])
+                        const snappedAngle = angle - angle % (2 * Math.PI / 36)
+                        const dir: [number, number] = [Math.cos(snappedAngle), Math.sin(snappedAngle)]
+                        setInputDir(dir)
+                    }
+                }
+            }
+
             if (clickOption === optionSignal && mouseDownPos.current !== null) {
-                mouseDownPos.current = [clientX, clientY]
+                mouseDownPos.current = pos
             }
 
             if (drawingMaterial) {
-                changeMaterial([clientX, clientY])
+                changeMaterial(pos)
             }
         }
-    }, [simulator, changeMaterial, clickOption, drawingMaterial])
+    }, [simulator, changeMaterial, clickOption, drawingMaterial, inputDir, inputStartPos, windowSize, snapInput])
 
     const onInputUp = useCallback(() => {
         if (clickOption === optionSignal) {
@@ -307,6 +335,9 @@ export default function () {
         } else if (clickOption === optionMaterialBrush) {
             setDrawingMaterial(false)
         }
+
+        setInputDir(null)
+        setInputStartPos(null)
     }, [clickOption])
 
     const activeBrushSize = useMemo(() => (clickOption === optionSignal ? signalBrushSize : materialBrushSize) * (canvasSize[0] / gridSize[0]), [clickOption, signalBrushSize, materialBrushSize, canvasSize, gridSize])
@@ -315,7 +346,7 @@ export default function () {
         <div style={{ touchAction: "none", userSelect: "none" }}>
             <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: windowSize[0], height: windowSize[1] }}
                 onMouseDown={e => onInputDown([e.clientX, e.clientY])}
-                onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY]) }}
+                onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY], e.shiftKey) }}
                 onMouseUp={e => onInputUp()}
                 onMouseLeave={e => onInputUp()}
                 onTouchStart={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputDown([e.touches[0].clientX, e.touches[0].clientY]) }}
@@ -359,6 +390,7 @@ export default function () {
                         signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
                         clickOption={clickOption} setClickOption={setClickOption}
                         drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
+                        snapInput={snapInput} setSnapInput={setSnapInput}
                         resetFields={resetFields} resetMaterials={resetMaterials} />
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Save / Load" initiallyCollapsed={true}>
