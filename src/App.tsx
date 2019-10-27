@@ -310,9 +310,9 @@ export default function () {
                     const offsetLengthSq = offset[0] * offset[0] + offset[1] * offset[1]
                     const minimumSnapLengthSq = 0.01 * 0.01 * (windowSize[0] * windowSize[0] + windowSize[1] * windowSize[1])
                     if (offsetLengthSq > minimumSnapLengthSq) {
-                        // Snap to 10° angles
-                        const angle = Math.atan2(offset[1], offset[0])
-                        const snappedAngle = angle - angle % (2 * Math.PI / 36)
+                        // Snap to discrete angles
+                        const angleQuantum = Math.PI / 4
+                        const snappedAngle = Math.round(Math.atan2(offset[1], offset[0]) / angleQuantum) * angleQuantum
                         const dir: [number, number] = [Math.cos(snappedAngle), Math.sin(snappedAngle)]
                         setInputDir(dir)
                     }

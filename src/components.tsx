@@ -312,7 +312,7 @@ export function ControlComponent(props: ControlComponentProps) {
 
     return (
         <div style={{ padding: "10px" }}>
-            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to line</label>
+            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to 45° line</label>
             <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
             <div style={{ display: showSignal ? undefined : "none" }}>
                 <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
