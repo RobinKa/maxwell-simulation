@@ -7,7 +7,7 @@ import iconFullscreen from "./icons/fullscreen.png"
 import iconGitHub from "./icons/github.png"
 import iconSettings from "./icons/settings.png"
 import iconShare from "./icons/share.png"
-import iconFeedback from "./icons/feedback.png"
+import iconInfo from "./icons/info.png"
 import iconExamples from "./icons/examples.png"
 import iconMaterialBrush from "./icons/materialbrush.png"
 import iconSignalBrush from "./icons/signalbrush.png"
@@ -446,6 +446,8 @@ export default function () {
         setSideMenuCollapsed(false)
     }, [sideBar])
 
+    const [infoVisible, setInfoVisible] = useState(false)
+
     return (
         <div>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, touchAction: "none", userSelect: "none" }}>
@@ -463,7 +465,7 @@ export default function () {
 
                 <div style={{ position: "absolute", bottom: 10, right: 10, ...hideWhenInputDownStyle }}>
                     <ImageButton onClick={_ => { generateShareUrl(); setShareVisible(!shareVisible) }} src={iconShare} highlight={shareVisible} />
-                    <a href="mailto:tora@warlock.ai?subject=EM simulation feedback"><ImageButton src={iconFeedback} /></a>
+                    <ImageButton onClick={_ => setInfoVisible(!infoVisible)} src={iconInfo} />
                     <a href="https://github.com/RobinKa/maxwell-simulation"><ImageButton src={iconGitHub} /></a>
                 </div>
 
@@ -522,6 +524,7 @@ export default function () {
                                                     cellSize={cellSize} simulationSpeed={simulationSpeed} /> : <div />)))}
                 </CollapsibleContainer>
             </div>
+
             {shareVisible &&
                 <div>
                     <div onClick={_ => setShareVisible(false)} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
@@ -533,6 +536,19 @@ export default function () {
                             <ShareComponent shareUrl={shareUrl} shareText="Check out what I made in this interactive web-based simulator for electromagnetic waves!" shareTitle="EM Simulator" />
                         </div>
                     }
+                </div>
+            }
+
+            {infoVisible &&
+                <div>
+                    <div onClick={_ => setInfoVisible(false)} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
+                    <div style={{ position: "absolute", backgroundColor: "rgb(30, 30, 30)", left: "50%", top: "50%", marginLeft: "-150px", marginTop: "-70px", width: "300px", height: "140px", textAlign: "center", padding: "10px", color: "white", fontWeight: "lighter" }}>
+                        <div>
+                            Made by <a href="https://github.com/RobinKa" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Robin Kahlow</a>. If you have feedback, ideas for improvement, bug reports or anything else open an issue on <a href="https://github.com/RobinKa/maxwell-simulation/issues" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">GitHub</a> or <a href="mailto:tora@warlock.ai?subject=EM simulation feedback"  style={{textDecoration: "none", color: "rgb(0, 150, 255)"}}>send an email to tora@warlock.ai</a>.
+                        </div>
+                        <div style={{marginTop: "5px"}}><a href="https://github.com/RobinKa/maxwell-simulation" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Source code</a></div>
+                        <div style={{marginTop: "5px"}}>Icons by <a href="https://icons8.com/" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Icons8</a></div>
+                    </div>
                 </div>
             }
         </div>
