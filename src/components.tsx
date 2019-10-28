@@ -176,7 +176,7 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
     }, [getMaterialMap, setShareId, dt, cellSize, gridSize])
 
     const shareUrl = useMemo(() => {
-        return shareId ? `${window.location.origin}/${shareId}` : null
+        return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
     }, [shareId])
     const shareUrlTextRef = useRef<HTMLInputElement>(null)
 
@@ -187,22 +187,16 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
         }
     }, [shareUrlTextRef])
 
-    const share = useMemo(() => {
-        const nav = window.navigator as any
-        if (nav && nav.share) {
-            return nav.share
-        }
-        return null
-    }, [])
-
     const onShareClicked = useCallback(() => {
-        if (share) {
-            share({
-                title: "Interactive electromagnetic wave simulator",
+        const nav = navigator as any
+        if (nav.share) {
+            nav.share({
+                title: "EM Simulator",
+                text: "Check out what I made in this interactive web-based simulator for electromagnetic waves!",
                 url: shareUrl
-            }).then(() => console.log("Shared")).catch((err: any) => console.error(`Share failed: ${JSON.stringify(err)}`))
+            }).then(() => console.log("Shared")).catch((err: any) => console.error(`Share failed: ${err}`))
         }
-    }, [shareUrl, share])
+    }, [shareUrl])
 
     return (
         <div style={{ padding: "10px", paddingTop: "0px" }}>
@@ -216,7 +210,7 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
                         <div>
                             <input ref={shareUrlTextRef} readOnly type="text" value={shareUrl} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "70%" }} />
                             <button onClick={onCopyClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Copy</button>
-                            {share && <button onClick={onShareClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Share</button>}
+                            {(navigator as any).share !== undefined && <button onClick={onShareClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Share</button>}
                         </div>
                     }
                 </div>

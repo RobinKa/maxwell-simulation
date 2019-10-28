@@ -1,5 +1,4 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { useParams, BrowserRouter as Router, Route, Switch } from "react-router-dom"
 import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent, ExamplesComponent } from './components'
@@ -89,11 +88,9 @@ const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
     return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([k.getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
-export function SimulatorApp() {
-    const urlParams = useParams<{ shareId?: string }>()
-    const urlShareId = urlParams.shareId
-
-    const [shareId, setShareId] = useState<string | null>(urlShareId || null)
+export default function () {
+    const urlShareId = window.location.hash ? window.location.hash.substr(1) : null
+    const [shareId, setShareId] = useState<string | null>(urlShareId)
 
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -430,15 +427,5 @@ export function SimulatorApp() {
                 </CollapsibleContainer>
             </CollapsibleContainer>
         </div>
-    )
-}
-
-export default function () {
-    return (
-        <Router>
-            <Switch>
-                <Route path="/:shareId?" children={<SimulatorApp />} />
-            </Switch>
-        </Router>
     )
 }
