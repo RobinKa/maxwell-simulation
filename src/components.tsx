@@ -1,9 +1,10 @@
 import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect } from "react"
-import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings } from "./serialization"
+import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings, MaterialMap } from "./serialization"
 import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
 import { QualityPreset } from "./util"
+import { shareSimulatorMap } from "./share"
 
 export type CollapsibleContainerProps = {
     children: ReactElement<any> | ReactElement<any>[] | null
@@ -113,44 +114,123 @@ export function OptionSelector(props: OptionSelectorProps) {
 export type SaveLoadComponentProps = {
     simulator: FDTDSimulator | null
     gridSize: [number, number]
+
+    shareId: string | null
+    setShareId: (shareId: string | null) => void
+
+    dt: number
+    cellSize: number
 }
 
 export function SaveLoadComponent(props: SaveLoadComponentProps) {
-    const simulator = props.simulator
-    const gridSize = props.gridSize
-    const [simulatorMapUrl, setSimulatorMapUrl] = useState("")
+    const { shareId, setShareId, simulator, dt, cellSize, gridSize } = props
 
-    const onSaveClicked = useCallback(() => {
-        if (simulator) {
-            const simData = simulator.getData()
+    const [materialMapUrl, setMaterialMapUrl] = useState("")
 
-            window.open(encodeMaterialMap({
-                permittivity: simData.permittivity.values.toArray() as number[][],
-                permeability: simData.permeability.values.toArray() as number[][],
-                shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
-            }))
+    const getMaterialMap = useMemo<() => (MaterialMap | null)>(() => {
+        return () => {
+            if (simulator) {
+                const simData = simulator.getData()
+                return {
+                    permittivity: simData.permittivity.values.toArray() as number[][],
+                    permeability: simData.permeability.values.toArray() as number[][],
+                    shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
+                }
+            }
+
+            return null
         }
     }, [simulator])
 
+    const onSaveClicked = useCallback(() => {
+        const materialMap = getMaterialMap()
+        if (materialMap) {
+            window.open(encodeMaterialMap(materialMap))
+        }
+    }, [getMaterialMap])
+
     const onLoadClicked = useCallback(() => {
         if (simulator) {
-            decodeMaterialMap(simulatorMapUrl, [gridSize[0], gridSize[1]], map => {
-                if (simulator) {
-                    simulator.loadPermeability(map.permeability)
-                    simulator.loadPermittivity(map.permittivity)
-                }
-            })
+            const materialMap = decodeMaterialMap(materialMapUrl)
+            if (simulator) {
+                simulator.loadPermeability(materialMap.permeability)
+                simulator.loadPermittivity(materialMap.permittivity)
+            }
         }
-    }, [simulator, gridSize, simulatorMapUrl])
+    }, [simulator, materialMapUrl])
+
+    const onGenerateShareUrlClicked = useCallback(() => {
+        const materialMap = getMaterialMap()
+        if (materialMap) {
+            shareSimulatorMap({
+                materialMap: materialMap,
+                simulationSettings: {
+                    cellSize: cellSize,
+                    dt: dt,
+                    gridSize: gridSize,
+                    simulationSpeed: 1
+                },
+                sourceDescriptors: []
+            }).then(shareId => setShareId(shareId)).catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
+        }
+    }, [getMaterialMap, setShareId, dt, cellSize, gridSize])
+
+    const shareUrl = useMemo(() => {
+        return shareId ? `${window.location.origin}/${shareId}` : null
+    }, [shareId])
+    const shareUrlTextRef = useRef<HTMLInputElement>(null)
+
+    const onCopyClicked = useCallback(() => {
+        if (shareUrlTextRef.current) {
+            shareUrlTextRef.current.select()
+            document.execCommand("copy")
+        }
+    }, [shareUrlTextRef])
+
+    const share = useMemo(() => {
+        const nav = window.navigator as any
+        if (nav && nav.share) {
+            return nav.share
+        }
+        return null
+    }, [])
+
+    const onShareClicked = useCallback(() => {
+        if (share) {
+            share({
+                title: "Interactive electromagnetic wave simulator",
+                url: shareUrl
+            }).then(() => console.log("Shared")).catch((err: any) => console.error(`Share failed: ${JSON.stringify(err)}`))
+        }
+    }, [shareUrl, share])
 
     return (
-        <div style={{ padding: "10px" }}>
+        <div style={{ padding: "10px", paddingTop: "0px" }}>
             <div>
-                <button onClick={onSaveClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Save map</button>
+                <div style={{ fontSize: "20px" }}>Share</div>
+                <div>
+                    <button onClick={onGenerateShareUrlClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Generate share url</button>
+                </div>
+                <div>
+                    {shareUrl &&
+                        <div>
+                            <input ref={shareUrlTextRef} readOnly type="text" value={shareUrl} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "70%" }} />
+                            <button onClick={onCopyClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Copy</button>
+                            {share && <button onClick={onShareClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Share</button>}
+                        </div>
+                    }
+                </div>
             </div>
-            <div>
-                <input type="text" onChange={e => setSimulatorMapUrl(e.target.value)} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }} />
-                <button onClick={onLoadClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Load map url</button>
+
+            <div style={{ marginTop: "5px" }}>
+                <div style={{ fontSize: "20px" }}>Material image</div>
+                <div>
+                    <button onClick={onSaveClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Save</button>
+                </div>
+                <div>
+                    <input type="text" onChange={e => setMaterialMapUrl(e.target.value)} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }} />
+                    <button onClick={onLoadClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Load</button>
+                </div>
             </div>
         </div>
     )
@@ -181,7 +261,7 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
             simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
         }
 
-        const loadedSources = simulatorMap.sourcesDescriptors.map(desc => {
+        const loadedSources = simulatorMap.sourceDescriptors.map(desc => {
             if (desc.type === "point") {
                 return new PointSignalSource(desc.amplitude, desc.frequency, desc.position, desc.turnOffTime)
             }

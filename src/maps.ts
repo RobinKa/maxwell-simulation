@@ -15,7 +15,7 @@ export function empty(simulationSettings: SimulationSettings): SimulatorMap {
     const sourceDescriptors: SourceDescriptor[] = []
 
     return {
-        sourcesDescriptors: sourceDescriptors,
+        sourceDescriptors: sourceDescriptors,
         simulationSettings: simulationSettings,
         materialMap: materialMap
     }
@@ -58,7 +58,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
     }]
 
     return {
-        sourcesDescriptors: sourceDescriptors,
+        sourceDescriptors: sourceDescriptors,
         simulationSettings: simulationSettings,
         materialMap: materialMap
     }
@@ -114,7 +114,7 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
     },]
 
     return {
-        sourcesDescriptors: sourceDescriptors,
+        sourceDescriptors: sourceDescriptors,
         simulationSettings: simulationSettings,
         materialMap: materialMap
     }
@@ -153,7 +153,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
     }]
 
     return {
-        sourcesDescriptors: sourceDescriptors,
+        sourceDescriptors: sourceDescriptors,
         simulationSettings: simulationSettings,
         materialMap: materialMap
     }

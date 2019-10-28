@@ -16,6 +16,17 @@ export function copyTexture(this: IKernelFunctionThis, texture: number[][]) {
     return texture[this.thread.y!][this.thread.x]
 }
 
+export function copyTextureWithBounds(this: IKernelFunctionThis, texture: number[][], bounds: number[], outOfBoundsValue: number) {
+    const x = this.thread.x as number
+    const y = this.thread.y! as number
+
+    if (x < 0 || y < 0 || x >= bounds[0] || y >= bounds[1]) {
+        return outOfBoundsValue
+    }
+
+    return texture[y][x]
+}
+
 export function drawSquare(this: IKernelFunctionThis, pos: number[], size: number, value: number, keep: number, texture: number[][]) {
     const x = this.thread.x as number
     const y = this.thread.y! as number

@@ -88,6 +88,7 @@ export class FDTDSimulator implements Simulator {
 
     private makeFieldTexture: (name: string) => IKernelRunShortcut
     private copyTexture: (name: string) => IKernelRunShortcut
+    private copyTextureWithBounds: (name: string) => IKernelRunShortcut
 
     private drawOnTexture: { [shape: string]: (name: string) => IKernelRunShortcut }
 
@@ -105,6 +106,7 @@ export class FDTDSimulator implements Simulator {
 
         this.makeFieldTexture = memoByName(() => makeKernel(k.makeFieldTexture))
         this.copyTexture = memoByName(() => makeKernel(k.copyTexture))
+        this.copyTextureWithBounds = memoByName(() => makeKernel(k.copyTextureWithBounds))
 
         const makeField = (name: string, initialValue: number): ScalarField2D => { return { values: this.makeFieldTexture(name)(initialValue) as Texture, shape: this.gridSize } }
 
@@ -148,12 +150,13 @@ export class FDTDSimulator implements Simulator {
             this.data.magneticField[dim].shape = gridSize
         }
 
+        const oldShape = this.data.permittivity.shape
+
         this.data.permittivity.shape = gridSize
         this.data.permeability.shape = gridSize
 
-        // TODO: Copy only the valid fraction. This one will potentially copy out of bounds.
-        this.data.permittivity.values = this.copyTexture("permittivity")(this.data.permittivity.values) as Texture
-        this.data.permeability.values = this.copyTexture("permeability")(this.data.permeability.values) as Texture
+        this.data.permittivity.values = this.copyTextureWithBounds("permittivity")(this.data.permittivity.values, oldShape, 1) as Texture
+        this.data.permeability.values = this.copyTextureWithBounds("permeability")(this.data.permeability.values, oldShape, 1) as Texture
 
         this.resetFields()
     }
@@ -235,11 +238,11 @@ export class FDTDSimulator implements Simulator {
     }
 
     loadPermittivity = (permittivity: number[][]) => {
-        this.data.permittivity.values = this.copyTexture("loadPermittivity")(permittivity) as Texture
+        this.data.permittivity.values = this.copyTextureWithBounds("loadPermittivity")(permittivity, [permittivity[0].length, permittivity.length], 1) as Texture
     }
 
     loadPermeability = (permeability: number[][]) => {
-        this.data.permeability.values = this.copyTexture("loadPermeability")(permeability) as Texture
+        this.data.permeability.values = this.copyTextureWithBounds("loadPermeability")(permeability, [permeability[0].length, permeability.length], 1) as Texture
     }
 
     getData = () => this.data

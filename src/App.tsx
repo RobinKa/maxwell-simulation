@@ -1,4 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
+import { useParams, BrowserRouter as Router, Route, Switch } from "react-router-dom"
 import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent, ExamplesComponent } from './components'
@@ -7,6 +8,7 @@ import Fullscreen from "./icons/fullscreen.png"
 import "./App.css"
 import { SignalSource } from './sources'
 import * as k from './kernels/rendering'
+import { getSharedSimulatorMap } from './share'
 
 function getGpuMode(): GPUMode | GPUInternalMode {
     if (GPU.isSinglePrecisionSupported) {
@@ -87,7 +89,12 @@ const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
     return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([k.getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
-export default function () {
+export function SimulatorApp() {
+    const urlParams = useParams<{ shareId?: string }>()
+    const urlShareId = urlParams.shareId
+
+    const [shareId, setShareId] = useState<string | null>(urlShareId || null)
+
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
 
     const [canvasSize, setCanvasSize] = useState<[number, number]>(initialCanvasSize)
@@ -126,6 +133,21 @@ export default function () {
 
     const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, initialCellSize, initialReflectiveBoundary) : null, [gpu])
     const renderSim = useMemo(() => gpu ? makeRenderSimulatorCanvas(gpu, initialGridSize) : null, [gpu])
+
+    // Load share id
+    useEffect(() => {
+        if (simulator && urlShareId) {
+            console.log(`Loading ${urlShareId}`)
+            getSharedSimulatorMap(urlShareId).then(simulatorMap => {
+                simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
+                simulator.loadPermeability(simulatorMap.materialMap.permeability)
+                setDt(simulatorMap.simulationSettings.dt)
+                setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
+                setCellSize(simulatorMap.simulationSettings.cellSize)
+                console.log(`Loaded ${urlShareId}`)
+            }).catch(err => console.error(`Error getting share ${urlShareId}: ${JSON.stringify(err)}`))
+        }
+    }, [simulator, urlShareId])
 
     // Update render sim output size
     useEffect(() => {
@@ -393,8 +415,8 @@ export default function () {
                         snapInput={snapInput} setSnapInput={setSnapInput}
                         resetFields={resetFields} resetMaterials={resetMaterials} />
                 </CollapsibleContainer>
-                <CollapsibleContainer title="Save / Load" initiallyCollapsed={true}>
-                    <SaveLoadComponent simulator={simulator} gridSize={gridSize} />
+                <CollapsibleContainer title="Share" initiallyCollapsed={true}>
+                    <SaveLoadComponent simulator={simulator} gridSize={gridSize} shareId={shareId} setShareId={setShareId} cellSize={cellSize} dt={dt} />
                 </CollapsibleContainer>
                 <CollapsibleContainer title="Settings" initiallyCollapsed={true}>
                     <SettingsComponent
@@ -408,5 +430,15 @@ export default function () {
                 </CollapsibleContainer>
             </CollapsibleContainer>
         </div>
+    )
+}
+
+export default function () {
+    return (
+        <Router>
+            <Switch>
+                <Route path="/:shareId?" children={<SimulatorApp />} />
+            </Switch>
+        </Router>
     )
 }
