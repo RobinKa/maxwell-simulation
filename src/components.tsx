@@ -1,5 +1,5 @@
 import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect } from "react"
-import { encodeMaterialMap, decodeMaterialMap, SimulatorMap, SimulationSettings, MaterialMap } from "./serialization"
+import { SimulatorMap, SimulationSettings, MaterialMap } from "./serialization"
 import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
@@ -125,8 +125,6 @@ export type SaveLoadComponentProps = {
 export function SaveLoadComponent(props: SaveLoadComponentProps) {
     const { shareId, setShareId, simulator, dt, cellSize, gridSize } = props
 
-    const [materialMapUrl, setMaterialMapUrl] = useState("")
-
     const getMaterialMap = useMemo<() => (MaterialMap | null)>(() => {
         return () => {
             if (simulator) {
@@ -141,23 +139,6 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
             return null
         }
     }, [simulator])
-
-    const onSaveClicked = useCallback(() => {
-        const materialMap = getMaterialMap()
-        if (materialMap) {
-            window.open(encodeMaterialMap(materialMap))
-        }
-    }, [getMaterialMap])
-
-    const onLoadClicked = useCallback(() => {
-        if (simulator) {
-            const materialMap = decodeMaterialMap(materialMapUrl)
-            if (simulator) {
-                simulator.loadPermeability(materialMap.permeability)
-                simulator.loadPermittivity(materialMap.permittivity)
-            }
-        }
-    }, [simulator, materialMapUrl])
 
     const onGenerateShareUrlClicked = useCallback(() => {
         const materialMap = getMaterialMap()
@@ -199,9 +180,8 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
     }, [shareUrl])
 
     return (
-        <div style={{ padding: "10px", paddingTop: "0px" }}>
+        <div style={{ padding: "10px" }}>
             <div>
-                <div style={{ fontSize: "20px" }}>Share</div>
                 <div>
                     <button onClick={onGenerateShareUrlClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Generate share url</button>
                 </div>
@@ -213,17 +193,6 @@ export function SaveLoadComponent(props: SaveLoadComponentProps) {
                             {(navigator as any).share !== undefined && <button onClick={onShareClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Share</button>}
                         </div>
                     }
-                </div>
-            </div>
-
-            <div style={{ marginTop: "5px" }}>
-                <div style={{ fontSize: "20px" }}>Material image</div>
-                <div>
-                    <button onClick={onSaveClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Save</button>
-                </div>
-                <div>
-                    <input type="text" onChange={e => setMaterialMapUrl(e.target.value)} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }} />
-                    <button onClick={onLoadClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Load</button>
                 </div>
             </div>
         </div>
