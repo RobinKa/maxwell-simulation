@@ -478,7 +478,7 @@ export default function () {
                     <ImageButton onClick={resetMaterials} src={iconResetMaterials} />
                 </div>
 
-                <CollapsibleContainer title={sideBar.toString()} style={{ position: "absolute", top: "100px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
+                <CollapsibleContainer title={sideBar.toString()} style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
                     {
                         sideBar === SideBarType.SignalBrush ?
                             <SignalBrushMenu

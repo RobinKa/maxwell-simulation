@@ -296,7 +296,7 @@ export function SettingsComponent(props: SettingsComponentProps) {
     }, [setCellSize, setGridSizeLongest, setResolutionScale, setDt])
 
     return (
-        <div style={{ padding: "10px" }}>
+        <div style={{ padding: "5px" }}>
             <div>Quality presets</div>
             <div>
                 {Object.keys(qualityPresets).map(presetName =>
