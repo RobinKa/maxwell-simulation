@@ -1,13 +1,24 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
-import { CollapsibleContainer, ControlComponent, SaveLoadComponent, SettingsComponent, ExamplesComponent } from './components'
+import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
 import { toggleFullScreen, clamp, QualityPreset } from './util'
-import Fullscreen from "./icons/fullscreen.png"
+import iconFullscreen from "./icons/fullscreen.png"
+import iconGitHub from "./icons/github.png"
+import iconSettings from "./icons/settings.png"
+import iconShare from "./icons/share.png"
+import iconInfo from "./icons/info.png"
+import iconExamples from "./icons/examples.png"
+import iconMaterialBrush from "./icons/materialbrush.png"
+import iconSignalBrush from "./icons/signalbrush.png"
+import iconResetMaterials from "./icons/resetmaterials.png"
+import iconResetFields from "./icons/resetfields.png"
 import "./App.css"
 import { SignalSource } from './sources'
 import * as k from './kernels/rendering'
-import { getSharedSimulatorMap } from './share'
+import { getSharedSimulatorMap, shareSimulatorMap } from './share'
+import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from './serialization'
+import { BounceLoader } from "react-spinners"
 
 function getGpuMode(): GPUMode | GPUInternalMode {
     if (GPU.isSinglePrecisionSupported) {
@@ -19,6 +30,13 @@ function getGpuMode(): GPUMode | GPUInternalMode {
     }
 
     return "cpu"
+}
+
+enum SideBarType {
+    SignalBrush = "Signal Brush",
+    MaterialBrush = "Material Brush",
+    Settings = "Settings",
+    Examples = "Examples"
 }
 
 const qualityPresets: { [presetName: string]: QualityPreset } = {
@@ -136,11 +154,18 @@ export default function () {
         if (simulator && urlShareId) {
             console.log(`Loading ${urlShareId}`)
             getSharedSimulatorMap(urlShareId).then(simulatorMap => {
+                // Load material
                 simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
                 simulator.loadPermeability(simulatorMap.materialMap.permeability)
+
+                // Load settings
                 setDt(simulatorMap.simulationSettings.dt)
                 setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
                 setCellSize(simulatorMap.simulationSettings.cellSize)
+
+                // Load sources
+                setSources(simulatorMap.sourceDescriptors.map(desc => descriptorToSignalSource(desc)))
+
                 console.log(`Loaded ${urlShareId}`)
             }).catch(err => console.error(`Error getting share ${urlShareId}: ${JSON.stringify(err)}`))
         }
@@ -302,6 +327,8 @@ export default function () {
         }
     }, [simulator])
 
+    const [isInputDown, setIsInputDown] = useState(false)
+
     const onInputDown = useCallback((clientPos: [number, number]) => {
         if (simulator) {
             setInputStartPos(clientPos)
@@ -312,7 +339,10 @@ export default function () {
                 changeMaterial(clientPos)
                 setDrawingMaterial(true)
             }
+
         }
+
+        setIsInputDown(true)
     }, [simulator, changeMaterial, clickOption])
 
     const onInputMove = useCallback((clientPos: [number, number], shiftDown?: boolean) => {
@@ -357,75 +387,170 @@ export default function () {
 
         setInputDir(null)
         setInputStartPos(null)
+
+        setIsInputDown(false)
     }, [clickOption])
 
     const activeBrushSize = useMemo(() => (clickOption === optionSignal ? signalBrushSize : materialBrushSize) * (canvasSize[0] / gridSize[0]), [clickOption, signalBrushSize, materialBrushSize, canvasSize, gridSize])
 
-    return (
-        <div style={{ touchAction: "none", userSelect: "none" }}>
-            <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: windowSize[0], height: windowSize[1] }}
-                onMouseDown={e => onInputDown([e.clientX, e.clientY])}
-                onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY], e.shiftKey) }}
-                onMouseUp={e => onInputUp()}
-                onMouseLeave={e => onInputUp()}
-                onTouchStart={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputDown([e.touches[0].clientX, e.touches[0].clientY]) }}
-                onTouchMove={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputMove([e.touches[0].clientX, e.touches[0].clientY]) }}
-                onTouchEnd={e => { setMousePosition(null); onInputUp() }}
-                onTouchCancel={e => { setMousePosition(null); onInputUp() }}
-                onContextMenu={e => e.preventDefault()}
-            />
+    const [sideBar, setSideBar] = useState(SideBarType.SignalBrush)
+    const [shareVisible, setShareVisible] = useState(false)
 
-            <div style={{ position: "absolute", bottom: 10, right: 10 }}>
-                <a href="mailto:tora@warlock.ai?subject=EM simulation feedback" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none", marginRight: "8px" }}>Feedback</a>
-                <a href="https://github.com/RobinKa/maxwell-simulation" rel="noopener noreferrer" target="_blank" style={{ fontWeight: "lighter", color: "rgba(255, 255, 255, 100)", textDecoration: "none" }}>Source code</a>
+    const hideWhenInputDownStyle = useMemo<React.CSSProperties>(() => isInputDown ? { pointerEvents: "none", opacity: 0.2 } : {}, [isInputDown])
+
+    const getMaterialMap = useMemo<() => (MaterialMap | null)>(() => {
+        return () => {
+            if (simulator) {
+                const simData = simulator.getData()
+                return {
+                    permittivity: simData.permittivity.values.toArray() as number[][],
+                    permeability: simData.permeability.values.toArray() as number[][],
+                    shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
+                }
+            }
+
+            return null
+        }
+    }, [simulator])
+
+    const [shareInProgress, setShareInProgress] = useState(false)
+
+    const [sideMenuCollapsed, setSideMenuCollapsed] = useState(false)
+
+    const generateShareUrl = useCallback(() => {
+        setShareInProgress(true)
+        const materialMap = getMaterialMap()
+        if (materialMap) {
+            shareSimulatorMap({
+                materialMap: materialMap,
+                simulationSettings: {
+                    cellSize: cellSize,
+                    dt: dt,
+                    gridSize: gridSize,
+                    simulationSpeed: 1
+                },
+                sourceDescriptors: sources.map(source => signalSourceToDescriptor(source))
+            })
+                .then(shareId => setShareId(shareId))
+                .catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
+                .finally(() => setShareInProgress(false))
+        }
+    }, [getMaterialMap, dt, cellSize, gridSize, sources])
+
+    const shareUrl = useMemo(() => {
+        return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
+    }, [shareId])
+
+    // Open side menu when switching the side bar
+    useEffect(() => {
+        setSideMenuCollapsed(false)
+    }, [sideBar])
+
+    const [infoVisible, setInfoVisible] = useState(false)
+
+    return (
+        <div>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, touchAction: "none", userSelect: "none" }}>
+                <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: windowSize[0], height: windowSize[1], cursor: "none" }}
+                    onMouseDown={e => onInputDown([e.clientX, e.clientY])}
+                    onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY], e.shiftKey) }}
+                    onMouseUp={e => onInputUp()}
+                    onMouseLeave={e => onInputUp()}
+                    onTouchStart={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputDown([e.touches[0].clientX, e.touches[0].clientY]) }}
+                    onTouchMove={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputMove([e.touches[0].clientX, e.touches[0].clientY]) }}
+                    onTouchEnd={e => { setMousePosition(null); onInputUp() }}
+                    onTouchCancel={e => { setMousePosition(null); onInputUp() }}
+                    onContextMenu={e => e.preventDefault()}
+                />
+
+                <div style={{ position: "absolute", bottom: 10, right: 10, ...hideWhenInputDownStyle }}>
+                    <ImageButton onClick={_ => { generateShareUrl(); setShareVisible(!shareVisible) }} src={iconShare} highlight={shareVisible} />
+                    <ImageButton onClick={_ => setInfoVisible(!infoVisible)} src={iconInfo} />
+                    <a href="https://github.com/RobinKa/maxwell-simulation"><ImageButton src={iconGitHub} /></a>
+                </div>
+
+                {mousePosition && (drawShapeType === "square" ?
+                    <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid rgb(255, 89, 0)" }} /> :
+                    <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid rgb(255, 89, 0)", borderRadius: "50%" }} />)
+                }
+
+                {gpuMode === "cpu" &&
+                    <div style={{ position: "absolute", pointerEvents: "none", left: 10, bottom: 10, color: "red", fontWeight: "lighter" }}>Using CPU (WebGL with float textures unsupported by your device)</div>
+                }
+
+                <div style={{ position: "absolute", top: "10px", left: "10px", ...hideWhenInputDownStyle }}>
+                    <ImageButton onClick={_ => { setSideBar(SideBarType.SignalBrush); setClickOption(optionSignal) }} src={iconSignalBrush} highlight={sideBar === SideBarType.SignalBrush} />
+                    <ImageButton onClick={_ => { setSideBar(SideBarType.MaterialBrush); setClickOption(optionMaterialBrush) }} src={iconMaterialBrush} highlight={sideBar === SideBarType.MaterialBrush} />
+                </div>
+
+                <div style={{ position: "absolute", top: "10px", right: "10px", ...hideWhenInputDownStyle }}>
+                    <ImageButton onClick={_ => setSideBar(SideBarType.Examples)} src={iconExamples} highlight={sideBar === SideBarType.Examples} />
+                    <ImageButton onClick={_ => setSideBar(SideBarType.Settings)} src={iconSettings} highlight={sideBar === SideBarType.Settings} />
+                    <ImageButton onClick={toggleFullScreen} src={iconFullscreen} />
+                </div>
+
+                <div style={{ position: "absolute", bottom: "10px", left: "10px", ...hideWhenInputDownStyle }}>
+                    <ImageButton onClick={resetFields} src={iconResetFields} />
+                    <ImageButton onClick={resetMaterials} src={iconResetMaterials} />
+                </div>
+
+                <CollapsibleContainer collapsed={sideMenuCollapsed} setCollapsed={setSideMenuCollapsed} title={sideBar.toString()}
+                    style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
+                    {sideBar === SideBarType.SignalBrush ?
+                        <SignalBrushMenu
+                            signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
+                            signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
+                            signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
+                            drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
+                            snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.MaterialBrush ?
+                                <MaterialBrushMenu
+                                    materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
+                                    permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
+                                    permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
+                                    drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
+                                    snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.Settings ?
+                                        <SettingsComponent
+                                            gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                                            simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                                            resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
+                                            cellSize={cellSize} setCellSize={setCellSize}
+                                            reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
+                                            dt={dt} setDt={setDt}
+                                            qualityPresets={qualityPresets} /> : (sideBar === SideBarType.Examples ?
+                                                <ExamplesComponent
+                                                    simulator={simulator} setCellSize={setCellSize} setDt={setDt}
+                                                    setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
+                                                    setSources={setSources} gridSize={gridSize} dt={dt}
+                                                    cellSize={cellSize} simulationSpeed={simulationSpeed} /> : <div />)))}
+                </CollapsibleContainer>
             </div>
 
-            {mousePosition && (drawShapeType === "square" ?
-                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow" }} /> :
-                <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid yellow", borderRadius: "50%" }} />)
+            {shareVisible &&
+                <div>
+                    <div onClick={_ => setShareVisible(false)} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
+                    {(shareInProgress || !shareUrl) ?
+                        <div style={{ position: "absolute", left: "50%", top: "50%", marginLeft: "-75px", marginTop: "-75px", width: "150px", height: "150px", textAlign: "center", padding: "10px" }}>
+                            <BounceLoader color="rgb(0, 150, 255)" size={100} />
+                        </div> :
+                        <div style={{ position: "absolute", backgroundColor: "rgb(30, 30, 30)", left: "50%", top: "50%", marginLeft: "-150px", marginTop: "-30px", width: "300px", height: "60px", textAlign: "center", padding: "10px" }}>
+                            <ShareComponent shareUrl={shareUrl} shareText="Check out what I made in this interactive web-based simulator for electromagnetic waves!" shareTitle="EM Simulator" />
+                        </div>
+                    }
+                </div>
             }
 
-            {gpuMode === "cpu" &&
-                <div style={{ position: "absolute", pointerEvents: "none", left: 10, bottom: 10, color: "red", fontWeight: "lighter" }}>Using CPU (WebGL with float textures unsupported by your device)</div>
+            {infoVisible &&
+                <div>
+                    <div onClick={_ => setInfoVisible(false)} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
+                    <div style={{ position: "absolute", backgroundColor: "rgb(30, 30, 30)", left: "50%", top: "50%", marginLeft: "-150px", marginTop: "-70px", width: "300px", height: "140px", textAlign: "center", padding: "10px", color: "white", fontWeight: "lighter" }}>
+                        <div>
+                            Made by <a href="https://github.com/RobinKa" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Robin Kahlow</a>. If you have feedback, ideas for improvement, bug reports or anything else open an issue on <a href="https://github.com/RobinKa/maxwell-simulation/issues" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">GitHub</a> or <a href="mailto:tora@warlock.ai?subject=EM simulation feedback"  style={{textDecoration: "none", color: "rgb(0, 150, 255)"}}>send an email to tora@warlock.ai</a>.
+                        </div>
+                        <div style={{marginTop: "5px"}}><a href="https://github.com/RobinKa/maxwell-simulation" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Source code</a></div>
+                        <div style={{marginTop: "5px"}}>Icons by <a href="https://icons8.com/" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Icons8</a></div>
+                    </div>
+                </div>
             }
-
-            <img onClick={toggleFullScreen} src={Fullscreen} alt="Fullscreen" style={{ position: "absolute", right: 10, top: 10, cursor: "pointer" }} />
-
-            <CollapsibleContainer id="Menu" title="Menu" buttonStyle={{ background: "rgb(60, 60, 60)" }}>
-                <CollapsibleContainer title="Examples">
-                    <ExamplesComponent
-                        simulator={simulator} setCellSize={setCellSize} setDt={setDt}
-                        setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                        setSources={setSources} gridSize={gridSize} dt={dt}
-                        cellSize={cellSize} simulationSpeed={simulationSpeed} />
-                </CollapsibleContainer>
-                <CollapsibleContainer title="Controls">
-                    <ControlComponent
-                        signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
-                        materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
-                        signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
-                        permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
-                        permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
-                        signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
-                        clickOption={clickOption} setClickOption={setClickOption}
-                        drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
-                        snapInput={snapInput} setSnapInput={setSnapInput}
-                        resetFields={resetFields} resetMaterials={resetMaterials} />
-                </CollapsibleContainer>
-                <CollapsibleContainer title="Share" initiallyCollapsed={true}>
-                    <SaveLoadComponent simulator={simulator} gridSize={gridSize} shareId={shareId} setShareId={setShareId} cellSize={cellSize} dt={dt} />
-                </CollapsibleContainer>
-                <CollapsibleContainer title="Settings" initiallyCollapsed={true}>
-                    <SettingsComponent
-                        gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                        simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
-                        resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
-                        cellSize={cellSize} setCellSize={setCellSize}
-                        reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
-                        dt={dt} setDt={setDt}
-                        qualityPresets={qualityPresets} />
-                </CollapsibleContainer>
-            </CollapsibleContainer>
         </div>
     )
 }

@@ -1,4 +1,5 @@
 import * as pako from "pako"
+import { SignalSource, PointSignalSource } from "./sources"
 
 export type SimulationSettings = {
     dt: number
@@ -33,6 +34,28 @@ export type EncodedSimulatorMap = {
     encodedMaterialMap: string
     simulationSettings: SimulationSettings
     sourceDescriptors: SourceDescriptor[]
+}
+
+export function signalSourceToDescriptor(source: SignalSource): SourceDescriptor {
+    if (source instanceof PointSignalSource) {
+        return {
+            type: "point",
+            position: source.position,
+            amplitude: source.amplitude,
+            frequency: source.frequency,
+            turnOffTime: source.turnOffTime
+        }
+    }
+
+    throw new Error("Unknown source: " + JSON.stringify(source))
+}
+
+export function descriptorToSignalSource(descriptor: SourceDescriptor): SignalSource {
+    if (descriptor.type === "point") {
+        return new PointSignalSource(descriptor.amplitude, descriptor.frequency, descriptor.position, descriptor.turnOffTime)
+    }
+
+    throw new Error("Unknown source type: " + descriptor.type)
 }
 
 export function encodeSimulatorMap(simulatorMap: SimulatorMap): EncodedSimulatorMap {

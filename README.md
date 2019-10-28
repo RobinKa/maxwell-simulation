@@ -1,3 +1,12 @@
+# Electromagnetic wave simulation
+An interactive web-based simulator of electromagnetic waves. Simulation done using the finite-difference time-domain method.
+Technology used among others: [React](https://reactjs.org/), [TypeScript](https://www.typescriptlang.org/), [GPU.js](https://gpu.rocks/).
+
+# Acknowledgements
+- [Icons8](https://icons8.com/) for icons
+
+# Create react app info
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts

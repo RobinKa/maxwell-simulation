@@ -28,7 +28,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
         shape: simulationSettings.gridSize
     }
 
-    const slitCenterX = Math.round(0.75 * simulationSettings.gridSize[0])
+    const slitCenterX = Math.round(0.5 * simulationSettings.gridSize[0])
 
     const slitSize = 0.2 / simulationSettings.cellSize
 
@@ -78,7 +78,7 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
 
     function getCurvePoint(t: number): [number, number] {
         return [
-            Math.round(simulationSettings.gridSize[0] * 3 / 4 + simulationSettings.gridSize[0] / 5 * 0.5 / (2 * t + 1) * -Math.sin(2 * Math.PI * t)),
+            Math.round(simulationSettings.gridSize[0] * 0.5 + simulationSettings.gridSize[0] / 5 * 0.5 / (2 * t + 1) * -Math.sin(2 * Math.PI * t)),
             Math.round(simulationSettings.gridSize[1] * (1 / 10 + t * (1 - 2 / 10)))
         ]
     }
