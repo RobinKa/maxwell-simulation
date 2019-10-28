@@ -1,4 +1,4 @@
-import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect } from "react"
+import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect, MouseEventHandler } from "react"
 import { SimulatorMap, SimulationSettings, MaterialMap } from "./serialization"
 import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
@@ -7,7 +7,7 @@ import { QualityPreset } from "./util"
 import { shareSimulatorMap } from "./share"
 
 export type CollapsibleContainerProps = {
-    children: ReactElement<any> | ReactElement<any>[] | null
+    children?: ReactElement<any> | ReactElement<any>[]
     id?: string
     className?: string
     style?: React.CSSProperties
@@ -20,11 +20,16 @@ export function CollapsibleContainer(props: CollapsibleContainerProps) {
     const [collapsed, setCollapsed] = useState(props.initiallyCollapsed !== undefined ? props.initiallyCollapsed : false)
 
     return (
-        <div id={props.id} className={props.className} style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", ...props.style }}>
-            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "100%", height: "24px", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", cursor: "pointer", ...props.buttonStyle }}>
-                {props.title ? `${props.title} ` : ""}[{collapsed ? "+" : "-"}]
+        <div id={props.id} className={props.className} style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", height: "400px", ...props.style }}>
+            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "30px", float: "left", height: "100%", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", fontSize: "20px", cursor: "pointer", ...props.buttonStyle }}>
+                {collapsed ? "<" : ">"}
             </button>
-            {!collapsed && props.children}
+            <div style={{ float: "right" }}>
+                {!collapsed && (<div>
+                    <div style={{ fontSize: "20px", marginTop: "4px" }}>{props.title}</div>
+                    {props.children}
+                </div>)}
+            </div>
         </div>
     )
 }
@@ -249,11 +254,11 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
     }, [props.dt, props.cellSize, props.gridSize, props.simulationSpeed])
 
     return (
-        <div style={{ padding: "10px" }}>
-            <button onClick={_ => loadMap(maps.empty(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Empty</button>
-            <button onClick={_ => loadMap(maps.doubleSlit(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Double slit</button>
-            <button onClick={_ => loadMap(maps.fiberOptics(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button>
-            <button onClick={_ => loadMap(maps.lens(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px" }}>Lens</button>
+        <div style={{ padding: "5px", width: "150px" }}>
+            <div><button onClick={_ => loadMap(maps.empty(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", width: "100%", border: "0px", color: "white", margin: "2px" }}>Empty</button></div>
+            <div><button onClick={_ => loadMap(maps.doubleSlit(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", width: "100%", border: "0px", color: "white", margin: "2px" }}>Double slit</button></div>
+            <div><button onClick={_ => loadMap(maps.fiberOptics(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", width: "100%", border: "0px", color: "white", margin: "2px" }}>Fiber optics</button></div>
+            <div><button onClick={_ => loadMap(maps.lens(simulationSettings))} style={{ backgroundColor: "rgb(50, 50, 50)", width: "100%", border: "0px", color: "white", margin: "2px" }}>Lens</button></div>
         </div>
     )
 }
@@ -311,13 +316,70 @@ export function SettingsComponent(props: SettingsComponentProps) {
     )
 }
 
-export type ControlComponentProps = {
-    signalBrushSize: number
-    setSignalBrushSize: (brushSize: number) => void
+type ImageButtonProps = {
+    onClick?: MouseEventHandler<HTMLButtonElement>
+    src?: string
+    size?: number
+    highlight?: boolean
+}
 
-    signalBrushValue: number
-    setSignalBrushValue: (brushValue: number) => void
+export function ImageButton(props: ImageButtonProps) {
+    const size = props.size || 48
 
+    return (
+        <button onClick={props.onClick} style={{ margin: "2px", padding: "5px", background: "transparent", border: props.highlight ? "2px solid rgb(0, 150, 255)" : "2px solid transparent", borderRadius: "10px", lineHeight: 0 }}>
+            <img width={size} height={size} src={props.src} alt="" style={{ width: size, height: size }} />
+        </button>
+    )
+}
+
+export type ShareComponentProps = {
+    shareUrl: string
+    shareTitle: string
+    shareText: string
+}
+
+export function ShareComponent(props: ShareComponentProps) {
+    const { shareTitle, shareText, shareUrl } = props
+
+    const shareUrlTextRef = useRef<HTMLInputElement>(null)
+
+    const onCopyClicked = useCallback(() => {
+        if (shareUrlTextRef.current) {
+            shareUrlTextRef.current.select()
+            document.execCommand("copy")
+        }
+    }, [shareUrlTextRef])
+
+    const onShareClicked = useCallback(() => {
+        const nav = navigator as any
+        if (nav.share) {
+            nav.share({
+                title: shareTitle,
+                text: shareText,
+                url: shareUrl
+            }).then(() => console.log("Shared")).catch((err: any) => console.error(`Share failed: ${err}`))
+        }
+    }, [shareUrl, shareTitle, shareText])
+
+    return (
+        <div style={{ padding: "5px" }}>
+            {shareUrl &&
+                <>
+                    <div>
+                        <input ref={shareUrlTextRef} readOnly type="text" value={shareUrl} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "70%" }} />
+                        <button onClick={onCopyClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Copy</button>
+                    </div>
+                    <div>
+                        {(navigator as any).share !== undefined && <button onClick={onShareClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", width: "80%", fontSize: "24px", color: "white", margin: "2px" }}>Share</button>}
+                    </div>
+                </>
+            }
+        </div>
+    )
+}
+
+export type MaterialBrushMenuProps = {
     materialBrushSize: number
     setMaterialBrushSize: (brushSize: number) => void
 
@@ -327,15 +389,6 @@ export type ControlComponentProps = {
     permittivityBrushValue: number
     setPermittivityBrushValue: (brushValue: number) => void
 
-    signalFrequency: number
-    setSignalFrequency: (signalFrequency: number) => void
-
-    clickOption: number
-    setClickOption: (clickOption: number) => void
-
-    resetFields: () => void
-    resetMaterials: () => void
-
     drawShapeType: DrawShapeType
     setDrawShapeType: (drawShapeType: DrawShapeType) => void
 
@@ -343,9 +396,7 @@ export type ControlComponentProps = {
     setSnapInput: (snapInput: boolean) => void
 }
 
-export function ControlComponent(props: ControlComponentProps) {
-    const showSignal = props.clickOption === 1
-
+export function MaterialBrushMenu(props: MaterialBrushMenuProps) {
     const { drawShapeType, setDrawShapeType } = props
 
     const drawShapeTypeIndex = useMemo(() => drawShapeType === "square" ? 0 : 1, [drawShapeType])
@@ -357,20 +408,48 @@ export function ControlComponent(props: ControlComponentProps) {
         <div style={{ padding: "10px" }}>
             <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to 45° line</label>
             <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
-            <div style={{ display: showSignal ? undefined : "none" }}>
-                <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
-                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={100} step={1} />
-                <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
-            </div>
-            <div style={{ display: !showSignal ? undefined : "none" }}>
+            <div>
                 <LabeledSlider label={brushSizeLabel} value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
                 <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
                 <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
             </div>
-            <OptionSelector style={{ margin: "10px" }} options={["Material", "Signal"]} selectedOption={props.clickOption} setSelectedOption={props.setClickOption} />
+        </div>
+    )
+}
+
+export type SignalBrushMenuProps = {
+    signalBrushSize: number
+    setSignalBrushSize: (brushSize: number) => void
+
+    signalBrushValue: number
+    setSignalBrushValue: (brushValue: number) => void
+
+    signalFrequency: number
+    setSignalFrequency: (signalFrequency: number) => void
+
+    drawShapeType: DrawShapeType
+    setDrawShapeType: (drawShapeType: DrawShapeType) => void
+
+    snapInput: boolean
+    setSnapInput: (snapInput: boolean) => void
+}
+
+export function SignalBrushMenu(props: SignalBrushMenuProps) {
+    const { drawShapeType, setDrawShapeType } = props
+
+    const drawShapeTypeIndex = useMemo(() => drawShapeType === "square" ? 0 : 1, [drawShapeType])
+    const setDrawShapeTypeIndex = useCallback((index: number) => setDrawShapeType(index === 0 ? "square" : "circle"), [setDrawShapeType])
+
+    const brushSizeLabel = useMemo(() => drawShapeType === "square" ? "Brush size" : "Brush radius", [drawShapeType])
+
+    return (
+        <div style={{ padding: "10px" }}>
+            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to 45° line</label>
+            <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={drawShapeTypeIndex} setSelectedOption={setDrawShapeTypeIndex} />
             <div>
-                <button onClick={props.resetFields} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset fields</button>
-                <button onClick={props.resetMaterials} style={{ backgroundColor: "rgb(50, 50, 50)", border: "0px", color: "white", margin: "2px", width: "130px" }}>Reset materials</button>
+                <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={100} step={1} />
+                <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             </div>
         </div>
     )
