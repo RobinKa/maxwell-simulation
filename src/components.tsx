@@ -13,21 +13,22 @@ export type CollapsibleContainerProps = {
     style?: React.CSSProperties
     buttonStyle?: React.CSSProperties
     title?: string
-    initiallyCollapsed?: boolean
+    collapsed: boolean
+    setCollapsed: (collapsed: boolean) => void
 }
 
 export function CollapsibleContainer(props: CollapsibleContainerProps) {
-    const [collapsed, setCollapsed] = useState(props.initiallyCollapsed !== undefined ? props.initiallyCollapsed : false)
+    const { collapsed, setCollapsed, id, className, buttonStyle, style, children, title } = props
 
     return (
-        <div id={props.id} className={props.className} style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", height: "400px", ...props.style }}>
-            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "30px", float: "left", height: "100%", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", fontSize: "20px", cursor: "pointer", ...props.buttonStyle }}>
+        <div id={id} className={className} style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", height: "400px", ...style }}>
+            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "30px", float: "left", height: "100%", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", fontSize: "20px", cursor: "pointer", ...buttonStyle }}>
                 {collapsed ? "<" : ">"}
             </button>
             <div style={{ float: "right" }}>
                 {!collapsed && (<div>
-                    <div style={{ fontSize: "20px", marginTop: "4px" }}>{props.title}</div>
-                    {props.children}
+                    <div style={{ fontSize: "20px", marginTop: "4px" }}>{title}</div>
+                    {children}
                 </div>)}
             </div>
         </div>

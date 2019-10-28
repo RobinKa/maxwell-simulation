@@ -408,6 +408,8 @@ export default function () {
 
     const [shareInProgress, setShareInProgress] = useState(false)
 
+    const [sideMenuCollapsed, setSideMenuCollapsed] = useState(false)
+
     const generateShareUrl = useCallback(() => {
         setShareInProgress(true)
         const materialMap = getMaterialMap()
@@ -432,6 +434,11 @@ export default function () {
         return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
     }, [shareId])
 
+    // Open side menu when switching the side bar
+    useEffect(() => {
+        setSideMenuCollapsed(false)
+    }, [sideBar])
+
     return (
         <div>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, touchAction: "none", userSelect: "none" }}>
@@ -449,8 +456,8 @@ export default function () {
 
                 <div style={{ position: "absolute", bottom: 10, right: 10, ...hideWhenInputDownStyle }}>
                     <ImageButton onClick={_ => { generateShareUrl(); setShareVisible(!shareVisible) }} src={iconShare} highlight={shareVisible} />
-                    <ImageButton onClick={_ => window.location.href = "mailto:tora@warlock.ai?subject=EM simulation feedback"} src={iconFeedback} />
-                    <ImageButton onClick={_ => window.location.href = "https://github.com/RobinKa/maxwell-simulation"} src={iconGitHub} />
+                    <a href="mailto:tora@warlock.ai?subject=EM simulation feedback"><ImageButton src={iconFeedback} /></a>
+                    <a href="https://github.com/RobinKa/maxwell-simulation"><ImageButton src={iconGitHub} /></a>
                 </div>
 
                 {mousePosition && (drawShapeType === "square" ?
@@ -478,35 +485,34 @@ export default function () {
                     <ImageButton onClick={resetMaterials} src={iconResetMaterials} />
                 </div>
 
-                <CollapsibleContainer title={sideBar.toString()} style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
-                    {
-                        sideBar === SideBarType.SignalBrush ?
-                            <SignalBrushMenu
-                                signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
-                                signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
-                                signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
-                                drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
-                                snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.MaterialBrush ?
-                                    <MaterialBrushMenu
-                                        materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
-                                        permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
-                                        permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
-                                        drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
-                                        snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.Settings ?
-                                            <SettingsComponent
-                                                gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                                                simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
-                                                resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
-                                                cellSize={cellSize} setCellSize={setCellSize}
-                                                reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
-                                                dt={dt} setDt={setDt}
-                                                qualityPresets={qualityPresets} /> : (sideBar === SideBarType.Examples ?
-                                                    <ExamplesComponent
-                                                        simulator={simulator} setCellSize={setCellSize} setDt={setDt}
-                                                        setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                                                        setSources={setSources} gridSize={gridSize} dt={dt}
-                                                        cellSize={cellSize} simulationSpeed={simulationSpeed} /> : <div />)))
-                    }
+                <CollapsibleContainer collapsed={sideMenuCollapsed} setCollapsed={setSideMenuCollapsed} title={sideBar.toString()}
+                    style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
+                    {sideBar === SideBarType.SignalBrush ?
+                        <SignalBrushMenu
+                            signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
+                            signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
+                            signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
+                            drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
+                            snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.MaterialBrush ?
+                                <MaterialBrushMenu
+                                    materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
+                                    permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
+                                    permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
+                                    drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
+                                    snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.Settings ?
+                                        <SettingsComponent
+                                            gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                                            simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                                            resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
+                                            cellSize={cellSize} setCellSize={setCellSize}
+                                            reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
+                                            dt={dt} setDt={setDt}
+                                            qualityPresets={qualityPresets} /> : (sideBar === SideBarType.Examples ?
+                                                <ExamplesComponent
+                                                    simulator={simulator} setCellSize={setCellSize} setDt={setDt}
+                                                    setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
+                                                    setSources={setSources} gridSize={gridSize} dt={dt}
+                                                    cellSize={cellSize} simulationSpeed={simulationSpeed} /> : <div />)))}
                 </CollapsibleContainer>
             </div>
             {shareVisible &&
