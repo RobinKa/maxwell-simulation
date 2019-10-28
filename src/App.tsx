@@ -17,7 +17,7 @@ import "./App.css"
 import { SignalSource } from './sources'
 import * as k from './kernels/rendering'
 import { getSharedSimulatorMap, shareSimulatorMap } from './share'
-import { MaterialMap } from './serialization'
+import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from './serialization'
 import { BounceLoader } from "react-spinners"
 
 function getGpuMode(): GPUMode | GPUInternalMode {
@@ -154,11 +154,18 @@ export default function () {
         if (simulator && urlShareId) {
             console.log(`Loading ${urlShareId}`)
             getSharedSimulatorMap(urlShareId).then(simulatorMap => {
+                // Load material
                 simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
                 simulator.loadPermeability(simulatorMap.materialMap.permeability)
+
+                // Load settings
                 setDt(simulatorMap.simulationSettings.dt)
                 setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
                 setCellSize(simulatorMap.simulationSettings.cellSize)
+
+                // Load sources
+                setSources(simulatorMap.sourceDescriptors.map(desc => descriptorToSignalSource(desc)))
+
                 console.log(`Loaded ${urlShareId}`)
             }).catch(err => console.error(`Error getting share ${urlShareId}: ${JSON.stringify(err)}`))
         }
@@ -422,13 +429,13 @@ export default function () {
                     gridSize: gridSize,
                     simulationSpeed: 1
                 },
-                sourceDescriptors: []
+                sourceDescriptors: sources.map(source => signalSourceToDescriptor(source))
             })
                 .then(shareId => setShareId(shareId))
                 .catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
                 .finally(() => setShareInProgress(false))
         }
-    }, [getMaterialMap, dt, cellSize, gridSize])
+    }, [getMaterialMap, dt, cellSize, gridSize, sources])
 
     const shareUrl = useMemo(() => {
         return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
