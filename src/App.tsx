@@ -316,6 +316,7 @@ export default function () {
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
+            setSources([])
             simulator.resetMaterials()
         }
     }, [simulator])
