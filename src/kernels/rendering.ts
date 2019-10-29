@@ -48,16 +48,10 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
 
     // Smoothstep
-    let backgroundX = 1 - (f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
-    let backgroundY = 1 - (f <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
-
-    if (permittivityValue < 0.1) {
-        backgroundX = backgroundX - 1
-    }
-
-    if (permeabilityValue < 0.1) {
-        backgroundY = backgroundY - 1
-    }
+    const bgX = -(f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
+    const bgY = -(f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
+    const backgroundX = permittivityValue >= 0.1 ? 1 + bgX : bgX
+    const backgroundY = permeabilityValue >= 0.1 ? 1 + bgY : bgY
 
     this.color(
         Math.min(1, eAA + 0.8 * backgroundX * permittivityValue),
@@ -108,16 +102,10 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
 
     // Smoothstep
-    let backgroundX = 1 - (f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
-    let backgroundY = 1 - (f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
-
-    if (permittivityValue < 0.1) {
-        backgroundX = backgroundX - 1
-    }
-
-    if (permeabilityValue < 0.1) {
-        backgroundY = backgroundY - 1
-    }
+    const bgX = -(f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
+    const bgY = -(f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
+    const backgroundX = permittivityValue >= 0.1 ? 1 + bgX : bgX
+    const backgroundY = permeabilityValue >= 0.1 ? 1 + bgY : bgY
 
     this.color(
         Math.min(1, eAA + 0.8 * backgroundX * permittivityValue),
