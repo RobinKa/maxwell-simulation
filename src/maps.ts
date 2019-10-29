@@ -101,13 +101,13 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
-        amplitude: 8000,
+        amplitude: 10000,
         frequency: 5,
         position: [endPoint[0] - 1, endPoint[1]],
         turnOffTime: 0.5
     }, {
         type: "point",
-        amplitude: 8000,
+        amplitude: 10000,
         frequency: 5,
         position: [endPoint[0] + 2, endPoint[1]],
         turnOffTime: 0.5
@@ -146,7 +146,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
-        amplitude: 20000,
+        amplitude: 30000,
         frequency: 2,
         position: [Math.round(simulationSettings.gridSize[0] / 10), Math.round(simulationSettings.gridSize[1] / 2)],
         turnOffTime: 0.5

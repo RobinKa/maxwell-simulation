@@ -32,15 +32,24 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const mZ = getAt(magneticFieldZ, gx, gy, x - 0.5, y - 0.5)
     const mAA = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
 
-    // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * x)
-    const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
-    const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
+    // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * (x-1))
+    const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y) - 1))) - 1)
+    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y) - 1))) - 1)
 
-    const tileFactorX = Math.max(1, gridSize[0] / this.output.x)
-    const tileFactorY = Math.max(1, gridSize[1] / this.output.y!)
+    const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
+    const tileFactorY = Math.min(1, 1 / Math.round(2 * gy / this.output.y!))
 
-    const backgroundX = (Math.abs((tileFactorX * x) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * y) % 1 - 0.5) < 0.25 ? 1 : 0)
-    const backgroundY = 1 - backgroundX
+    const dx = ((tileFactorX * x) % 1) - 0.5
+    const dy = ((tileFactorY * y) % 1) - 0.5
+    const f = (dx * dx + dy * dy) * Math.sqrt(2 * Math.PI)
+
+    const dx2 = ((tileFactorX * x + 0.5) % 1) - 0.5
+    const dy2 = ((tileFactorY * y + 0.5) % 1) - 0.5
+    const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
+
+    // Smoothstep
+    const backgroundX = 1 - (f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
+    const backgroundY = 1 - (f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
 
     this.color(
         Math.min(1, eAA + 0.8 * backgroundX * permittivityValue),
@@ -75,15 +84,24 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const mZ = getAt(magneticFieldZ, gx, gy, x, y)
     const mAA = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
 
-    // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * x)
-    const permittivityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permittivity, gx, gy, x, y)))) - 1)
-    const permeabilityValue = (2 / (1 + Math.exp(-0.4 * (getAt(permeability, gx, gy, x, y)))) - 1)
+    // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * (x-1))
+    const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y) - 1))) - 1)
+    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y) - 1))) - 1)
 
-    const tileFactorX = Math.max(1, gridSize[0] / this.output.x)
-    const tileFactorY = Math.max(1, gridSize[1] / this.output.y!)
+    const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
+    const tileFactorY = Math.min(1, 1 / Math.round(2 * gy / this.output.y!))
 
-    const backgroundX = (Math.abs((tileFactorX * fx) % 1 - 0.5) < 0.25 ? 1 : 0) * (Math.abs((tileFactorY * fy) % 1 - 0.5) < 0.25 ? 1 : 0)
-    const backgroundY = 1 - backgroundX
+    const dx = ((tileFactorX * fx) % 1) - 0.5
+    const dy = ((tileFactorY * fy) % 1) - 0.5
+    const f = (dx * dx + dy * dy) * Math.sqrt(2 * Math.PI)
+
+    const dx2 = ((tileFactorX * fx + 0.5) % 1) - 0.5
+    const dy2 = ((tileFactorY * fy + 0.5) % 1) - 0.5
+    const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
+
+    // Smoothstep
+    const backgroundX = 1 - (f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
+    const backgroundY = 1 - (f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
 
     this.color(
         Math.min(1, eAA + 0.8 * backgroundX * permittivityValue),
