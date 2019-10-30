@@ -1,8 +1,8 @@
 {
   "name": "maxwell",
   "version": "0.1.0",
-  "homepage": "https://warlock.ai/maxwell",
   "private": true,
+  "homepage": "https://cemsim.com",
   "dependencies": {
     "@types/jest": "24.0.19",
     "@types/node": "12.11.1",
