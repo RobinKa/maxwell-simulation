@@ -74,7 +74,7 @@ export function decaySource(this: IKernelFunctionThis, source: number[][], dt: n
     return getAt(source, gx, gy, x, y) * Math.pow(0.1, dt)
 }
 
-export function updateMagneticX(this: IKernelFunctionThis, fieldY: number[][], fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateMagneticX(this: IKernelFunctionThis, fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -90,12 +90,12 @@ export function updateMagneticX(this: IKernelFunctionThis, fieldY: number[][], f
         }
     }
 
-    // d_Y Z - d_Z Y
+    // d_Y Z - d_Z Y, but d_Z = 0 in 2d
     return getAt(magFieldX, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
         (getAt(fieldZ, gx, gy, x, y + 1) - getAt(fieldZ, gx, gy, x, y)))
 }
 
-export function updateMagneticY(this: IKernelFunctionThis, fieldX: number[][], fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateMagneticY(this: IKernelFunctionThis, fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -111,7 +111,7 @@ export function updateMagneticY(this: IKernelFunctionThis, fieldX: number[][], f
         }
     }
 
-    // d_Z X - d_X Z
+    // d_Z X - d_X Z, but d_Z = 0 in 2d
     return getAt(magFieldY, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
         -(getAt(fieldZ, gx, gy, x + 1, y) - getAt(fieldZ, gx, gy, x, y)))
 }
@@ -138,7 +138,7 @@ export function updateMagneticZ(this: IKernelFunctionThis, fieldX: number[][], f
         (getAt(fieldX, gx, gy, x, y + 1) - getAt(fieldX, gx, gy, x, y)))
 }
 
-export function updateElectricX(this: IKernelFunctionThis, fieldY: number[][], fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateElectricX(this: IKernelFunctionThis, fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -154,12 +154,12 @@ export function updateElectricX(this: IKernelFunctionThis, fieldY: number[][], f
         }
     }
 
-    // d_Y Z - d_Z Y
+    // d_Y Z - d_Z Y, but d_Z = 0 in 2d
     return getAt(elFieldX, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
         (getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x, y - 1)))
 }
 
-export function updateElectricY(this: IKernelFunctionThis, fieldX: number[][], fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateElectricY(this: IKernelFunctionThis, fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -175,7 +175,7 @@ export function updateElectricY(this: IKernelFunctionThis, fieldX: number[][], f
         }
     }
 
-    // d_Z X - d_X Z
+    // d_Z X - d_X Z, but d_Z = 0 in 2d
     return getAt(elFieldY, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
         -(getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x - 1, y)))
 }

@@ -176,8 +176,8 @@ export class FDTDSimulator implements Simulator {
         this.data.electricSourceFieldZ.values = this.decaySource(this.copyTexture("es2")(this.data.electricSourceFieldZ.values), dt) as Texture
 
         // d/dt E(x, t) = curl B(x, t) / ε
-        this.data.electricField[0].values = this.updateElectric[0](mag[1], mag[2], perm, this.copyTexture("e0")(el[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.electricField[1].values = this.updateElectric[1](mag[0], mag[2], perm, this.copyTexture("e1")(el[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.electricField[0].values = this.updateElectric[0](mag[2], perm, this.copyTexture("e0")(el[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.electricField[1].values = this.updateElectric[1](mag[2], perm, this.copyTexture("e1")(el[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
         this.data.electricField[2].values = this.updateElectric[2](mag[0], mag[1], perm, injectedElZ, dt, this.cellSize, this.reflectiveBoundary) as Texture
 
         this.data.time += dt / 2
@@ -189,8 +189,8 @@ export class FDTDSimulator implements Simulator {
         const perm = this.data.permeability.values
 
         // d/dt B(x, t) = -curl E(x, t) / µ
-        this.data.magneticField[0].values = this.updateMagnetic[0](el[1], el[2], perm, this.copyTexture("m0")(mag[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.magneticField[1].values = this.updateMagnetic[1](el[0], el[2], perm, this.copyTexture("m1")(mag[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.magneticField[0].values = this.updateMagnetic[0](el[2], perm, this.copyTexture("m0")(mag[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.magneticField[1].values = this.updateMagnetic[1](el[2], perm, this.copyTexture("m1")(mag[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
         this.data.magneticField[2].values = this.updateMagnetic[2](el[0], el[1], perm, this.copyTexture("m2")(mag[2]), dt, this.cellSize, this.reflectiveBoundary) as Texture
 
         this.data.time += dt / 2
