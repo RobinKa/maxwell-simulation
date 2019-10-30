@@ -144,7 +144,7 @@ export default function () {
         if (drawCanvasRef.current) {
             const gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
 
-            if (gpuMode === "cpu") {
+            if (gpuMode === "cpu" || gpuMode === "dev") {
                 gpu.addFunction(k.nativeSmoothStep)
             } else {
                 gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
@@ -256,8 +256,8 @@ export default function () {
                 const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time)
 
                 const drawInfo = drawShapeType === "square" ?
-                    makeDrawSquareInfo(center, brushHalfSize, value) :
-                    makeDrawCircleInfo(center, brushHalfSize, value)
+                    makeDrawSquareInfo(center, brushHalfSize, [0, 0, value, 0, 0, 0]) :
+                    makeDrawCircleInfo(center, brushHalfSize, [0, 0, value, 0, 0, 0])
 
                 simulator.injectSignal(drawInfo, dt)
             }
@@ -290,8 +290,7 @@ export default function () {
 
             const simData = simulator.getData()
 
-            renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
-                simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
+            renderSim(simData.electricField.values, simData.magneticField.values,
                 simData.permittivity.values, simData.permeability.values, gridSize, cellSize)
         }
     }, [simulator, renderSim, gridSize, cellSize, resolutionScale, drawCanvasRef])
@@ -319,12 +318,12 @@ export default function () {
             const brushHalfSize = Math.round(materialBrushSize / 2)
 
             simulator.drawMaterial("permittivity", drawShapeType === "square" ?
-                makeDrawSquareInfo(center, brushHalfSize, permittivityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, permittivityBrushValue))
+                makeDrawSquareInfo(center, brushHalfSize, [permittivityBrushValue, 0]) :
+                makeDrawCircleInfo(center, brushHalfSize, [permittivityBrushValue, 0]))
 
             simulator.drawMaterial("permeability", drawShapeType === "square" ?
-                makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
+                makeDrawSquareInfo(center, brushHalfSize, [permeabilityBrushValue, 0]) :
+                makeDrawCircleInfo(center, brushHalfSize, [permeabilityBrushValue, 0]))
         }
     }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, drawShapeType])
 

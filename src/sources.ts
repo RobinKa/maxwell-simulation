@@ -13,7 +13,7 @@ export class PointSignalSource implements SignalSource {
         const t = simulator.getData().time
         if (t >= 0 && (this.turnOffTime === undefined || t <= this.turnOffTime)) {
             const amplitude = -this.amplitude * Math.cos(2 * Math.PI * this.frequency * t)
-            const drawInfo = makeDrawSquareInfo(this.position, 1, amplitude)
+            const drawInfo = makeDrawSquareInfo(this.position, 1, [0, 0, amplitude, 0, 0, 0])
             simulator.injectSignal(drawInfo, dt)
         }
     }

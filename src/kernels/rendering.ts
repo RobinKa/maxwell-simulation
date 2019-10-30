@@ -1,20 +1,19 @@
 import { IKernelFunctionThis } from "gpu.js"
 
-export function getAt(field: number[][], shapeX: number, shapeY: number, x: number, y: number) {
+export function getAt(field: number[][][], shapeX: number, shapeY: number, x: number, y: number, z: number) {
     if (x < 0 || x >= shapeX || y < 0 || y >= shapeY) {
         return 0
     }
 
-    return field[y][x]
+    return field[z][y][x]
 }
 
 export function nativeSmoothStep(x: number) {
     return (x <= 0 ? 0 : (x >= 1 ? 1 : 3 * x * x - 2 * x * x * x))
 }
 
-export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-    magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-    permittivity: number[][], permeability: number[][], gridSize: number[], cellSize: number) {
+export function drawGpu(this: IKernelFunctionThis, electricField: number[][][], magneticField: number[][][],
+    permittivity: number[][][], permeability: number[][][], gridSize: number[], cellSize: number) {
     const gx = gridSize[0]
     const gy = gridSize[1]
 
@@ -25,20 +24,20 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     // of concentrated in less cells so we need to make it brighter.
     const fieldBrightness = (0.02 * 0.02) / (cellSize * cellSize)
 
-    const eX = getAt(electricFieldX, gx, gy, x, y)
-    const eY = getAt(electricFieldY, gx, gy, x, y)
-    const eZ = getAt(electricFieldZ, gx, gy, x, y)
+    const eX = getAt(electricField, gx, gy, x, y, 0)
+    const eY = getAt(electricField, gx, gy, x, y, 1)
+    const eZ = getAt(electricField, gx, gy, x, y, 2)
     const eEnergy = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
 
     // Magnetic field is offset from electric field, so get value at -0.5 by interpolating 0 and 1
-    const mX = getAt(magneticFieldX, gx, gy, x - 0.5, y - 0.5)
-    const mY = getAt(magneticFieldY, gx, gy, x - 0.5, y - 0.5)
-    const mZ = getAt(magneticFieldZ, gx, gy, x - 0.5, y - 0.5)
+    const mX = getAt(magneticField, gx, gy, x - 0.5, y - 0.5, 0)
+    const mY = getAt(magneticField, gx, gy, x - 0.5, y - 0.5, 1)
+    const mZ = getAt(magneticField, gx, gy, x - 0.5, y - 0.5, 2)
     const mEnergy = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
 
     // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * (x-1))
-    const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y) - 1))) - 1)
-    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y) - 1))) - 1)
+    const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y, 0) - 1))) - 1)
+    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y, 0) - 1))) - 1)
 
     // Display material as circles. Permittivity and permeability are offset circles from each other.
     const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
@@ -66,9 +65,8 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
 }
 
 // On CPU we can't use float indices so round the coordinates
-export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-    magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-    permittivity: number[][], permeability: number[][], gridSize: number[], cellSize: number) {
+export function drawCpu(this: IKernelFunctionThis, electricField: number[][][], magneticField: number[][][],
+    permittivity: number[][][], permeability: number[][][], gridSize: number[], cellSize: number) {
     const gx = gridSize[0]
     const gy = gridSize[1]
 
@@ -81,20 +79,20 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     // of concentrated in less cells so we need to make it brighter.
     const fieldBrightness = (0.02 * 0.02) / (cellSize * cellSize)
 
-    const eX = getAt(electricFieldX, gx, gy, x, y)
-    const eY = getAt(electricFieldY, gx, gy, x, y)
-    const eZ = getAt(electricFieldZ, gx, gy, x, y)
+    const eX = getAt(electricField, gx, gy, x, y, 0)
+    const eY = getAt(electricField, gx, gy, x, y, 1)
+    const eZ = getAt(electricField, gx, gy, x, y, 2)
     const eEnergy = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
 
     // Magnetic field is offset from electric field, so get value at -0.5 by interpolating 0 and 1
-    const mX = getAt(magneticFieldX, gx, gy, x, y)
-    const mY = getAt(magneticFieldY, gx, gy, x, y)
-    const mZ = getAt(magneticFieldZ, gx, gy, x, y)
+    const mX = getAt(magneticField, gx, gy, x, y, 0)
+    const mY = getAt(magneticField, gx, gy, x, y, 1)
+    const mZ = getAt(magneticField, gx, gy, x, y, 2)
     const mEnergy = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
 
     // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * (x-1))
-    const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y) - 1))) - 1)
-    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y) - 1))) - 1)
+    const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y, 0) - 1))) - 1)
+    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y, 0) - 1))) - 1)
 
     // Display material as circles. Permittivity and permeability are offset circles from each other.
     const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
