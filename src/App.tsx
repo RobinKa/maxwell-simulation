@@ -142,7 +142,15 @@ export default function () {
     const [gpu, setGpu] = useState<GPU | null>(null)
     useEffect(() => {
         if (drawCanvasRef.current) {
-            setGpu(new GPU({ mode: gpuMode, canvas: drawCanvasRef.current }))
+            const gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
+
+            if (gpuMode === "cpu") {
+                gpu.addFunction(k.nativeSmoothStep)
+            } else {
+                gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
+            }
+
+            setGpu(gpu)
         }
     }, [drawCanvasRef])
 

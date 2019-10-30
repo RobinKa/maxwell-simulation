@@ -8,6 +8,10 @@ export function getAt(field: number[][], shapeX: number, shapeY: number, x: numb
     return field[y][x]
 }
 
+export function nativeSmoothStep(x: number) {
+    return (x <= 0 ? 0 : (x >= 1 ? 1 : 3 * x * x - 2 * x * x * x))
+}
+
 export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
     magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
     permittivity: number[][], permeability: number[][], gridSize: number[], cellSize: number) {
@@ -48,8 +52,8 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
 
     // Smoothstep
-    const bgX = -(f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
-    const bgY = -(f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
+    const bgX = -nativeSmoothStep(f)
+    const bgY = -nativeSmoothStep(f2)
     const backgroundX = permittivityValue >= 0.1 ? 1 + bgX : bgX
     const backgroundY = permeabilityValue >= 0.1 ? 1 + bgY : bgY
 
@@ -102,8 +106,8 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
 
     // Smoothstep
-    const bgX = -(f <= 0 ? 0 : (f >= 1 ? 1 : 3 * f * f - 2 * f * f * f))
-    const bgY = -(f2 <= 0 ? 0 : (f2 >= 1 ? 1 : 3 * f2 * f2 - 2 * f2 * f2 * f2))
+    const bgX = -nativeSmoothStep(f)
+    const bgY = -nativeSmoothStep(f2)
     const backgroundX = permittivityValue >= 0.1 ? 1 + bgX : bgX
     const backgroundY = permeabilityValue >= 0.1 ? 1 + bgY : bgY
 
