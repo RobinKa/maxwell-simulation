@@ -1,11 +1,11 @@
 import { IKernelFunctionThis } from "gpu.js"
 
-export function getAt(field: number[][], shapeX: number, shapeY: number, x: number, y: number) {
+export function getAt(texture: number[][], shapeX: number, shapeY: number, x: number, y: number) {
     if (x < 0 || x >= shapeX || y < 0 || y >= shapeY) {
         return 0
     }
 
-    return field[y][x]
+    return texture[y][x]
 }
 
 export function makeFieldTexture(this: IKernelFunctionThis, value: number) {
@@ -74,7 +74,7 @@ export function decaySource(this: IKernelFunctionThis, source: number[][], dt: n
     return getAt(source, gx, gy, x, y) * Math.pow(0.1, dt)
 }
 
-export function updateMagneticX(this: IKernelFunctionThis, fieldZ: number[][], permeability: number[][], magFieldX: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateMagneticX(this: IKernelFunctionThis, electricFieldZ: number[][], permeability: number[][], magneticFieldX: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -86,16 +86,16 @@ export function updateMagneticX(this: IKernelFunctionThis, fieldZ: number[][], p
         const yAtMinBound = y < 2 ? 1 : 0
         const yAtMaxBound = y + 2 >= gy ? -1 : 0
         if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return magFieldX[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            return magneticFieldX[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
         }
     }
 
     // d_Y Z - d_Z Y, but d_Z = 0 in 2d
-    return getAt(magFieldX, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
-        (getAt(fieldZ, gx, gy, x, y + 1) - getAt(fieldZ, gx, gy, x, y)))
+    return getAt(magneticFieldX, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cellSize)) * (
+        (getAt(electricFieldZ, gx, gy, x, y + 1) - getAt(electricFieldZ, gx, gy, x, y)))
 }
 
-export function updateMagneticY(this: IKernelFunctionThis, fieldZ: number[][], permeability: number[][], magFieldY: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateMagneticY(this: IKernelFunctionThis, electricFieldZ: number[][], permeability: number[][], magneticFieldY: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -107,16 +107,16 @@ export function updateMagneticY(this: IKernelFunctionThis, fieldZ: number[][], p
         const yAtMinBound = y < 2 ? 1 : 0
         const yAtMaxBound = y + 2 >= gy ? -1 : 0
         if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return magFieldY[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            return magneticFieldY[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
         }
     }
 
     // d_Z X - d_X Z, but d_Z = 0 in 2d
-    return getAt(magFieldY, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
-        -(getAt(fieldZ, gx, gy, x + 1, y) - getAt(fieldZ, gx, gy, x, y)))
+    return getAt(magneticFieldY, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cellSize)) * (
+        -(getAt(electricFieldZ, gx, gy, x + 1, y) - getAt(electricFieldZ, gx, gy, x, y)))
 }
 
-export function updateMagneticZ(this: IKernelFunctionThis, fieldX: number[][], fieldY: number[][], permeability: number[][], magFieldZ: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateMagneticZ(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], permeability: number[][], magneticFieldZ: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -128,17 +128,17 @@ export function updateMagneticZ(this: IKernelFunctionThis, fieldX: number[][], f
         const yAtMinBound = y < 2 ? 1 : 0
         const yAtMaxBound = y + 2 >= gy ? -1 : 0
         if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return magFieldZ[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            return magneticFieldZ[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
         }
     }
 
     // d_X Y - d_Y X
-    return getAt(magFieldZ, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cs)) * (
-        (getAt(fieldY, gx, gy, x + 1, y) - getAt(fieldY, gx, gy, x, y)) -
-        (getAt(fieldX, gx, gy, x, y + 1) - getAt(fieldX, gx, gy, x, y)))
+    return getAt(magneticFieldZ, gx, gy, x, y) - (dt / (getAt(permeability, gx, gy, x, y) * cellSize)) * (
+        (getAt(electricFieldY, gx, gy, x + 1, y) - getAt(electricFieldY, gx, gy, x, y)) -
+        (getAt(electricFieldX, gx, gy, x, y + 1) - getAt(electricFieldX, gx, gy, x, y)))
 }
 
-export function updateElectricX(this: IKernelFunctionThis, fieldZ: number[][], permittivity: number[][], elFieldX: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateElectricX(this: IKernelFunctionThis, magneticFieldZ: number[][], permittivity: number[][], electricFieldX: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -150,16 +150,16 @@ export function updateElectricX(this: IKernelFunctionThis, fieldZ: number[][], p
         const yAtMinBound = y < 2 ? 1 : 0
         const yAtMaxBound = y + 2 >= gy ? -1 : 0
         if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return elFieldX[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            return electricFieldX[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
         }
     }
 
     // d_Y Z - d_Z Y, but d_Z = 0 in 2d
-    return getAt(elFieldX, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
-        (getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x, y - 1)))
+    return getAt(electricFieldX, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cellSize)) * (
+        (getAt(magneticFieldZ, gx, gy, x, y) - getAt(magneticFieldZ, gx, gy, x, y - 1)))
 }
 
-export function updateElectricY(this: IKernelFunctionThis, fieldZ: number[][], permittivity: number[][], elFieldY: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateElectricY(this: IKernelFunctionThis, magneticFieldZ: number[][], permittivity: number[][], electricFieldY: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -171,16 +171,16 @@ export function updateElectricY(this: IKernelFunctionThis, fieldZ: number[][], p
         const yAtMinBound = y < 2 ? 1 : 0
         const yAtMaxBound = y + 2 >= gy ? -1 : 0
         if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return elFieldY[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            return electricFieldY[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
         }
     }
 
     // d_Z X - d_X Z, but d_Z = 0 in 2d
-    return getAt(elFieldY, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
-        -(getAt(fieldZ, gx, gy, x, y) - getAt(fieldZ, gx, gy, x - 1, y)))
+    return getAt(electricFieldY, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cellSize)) * (
+        -(getAt(magneticFieldZ, gx, gy, x, y) - getAt(magneticFieldZ, gx, gy, x - 1, y)))
 }
 
-export function updateElectricZ(this: IKernelFunctionThis, fieldX: number[][], fieldY: number[][], permittivity: number[][], elFieldZ: number[][], dt: number, cs: number, reflectiveBoundary: boolean) {
+export function updateElectricZ(this: IKernelFunctionThis, magneticFieldX: number[][], magneticFieldY: number[][], permittivity: number[][], electricFieldZ: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
@@ -192,12 +192,12 @@ export function updateElectricZ(this: IKernelFunctionThis, fieldX: number[][], f
         const yAtMinBound = y < 2 ? 1 : 0
         const yAtMaxBound = y + 2 >= gy ? -1 : 0
         if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return elFieldZ[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            return electricFieldZ[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
         }
     }
 
     // d_X Y - d_Y X
-    return getAt(elFieldZ, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cs)) * (
-        (getAt(fieldY, gx, gy, x, y) - getAt(fieldY, gx, gy, x - 1, y)) -
-        (getAt(fieldX, gx, gy, x, y) - getAt(fieldX, gx, gy, x, y - 1)))
+    return getAt(electricFieldZ, gx, gy, x, y) + (dt / (getAt(permittivity, gx, gy, x, y) * cellSize)) * (
+        (getAt(magneticFieldY, gx, gy, x, y) - getAt(magneticFieldY, gx, gy, x - 1, y)) -
+        (getAt(magneticFieldX, gx, gy, x, y) - getAt(magneticFieldX, gx, gy, x, y - 1)))
 }

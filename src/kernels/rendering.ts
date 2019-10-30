@@ -28,39 +28,41 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const eX = getAt(electricFieldX, gx, gy, x, y)
     const eY = getAt(electricFieldY, gx, gy, x, y)
     const eZ = getAt(electricFieldZ, gx, gy, x, y)
-    const eAA = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
+    const eEnergy = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
 
     // Magnetic field is offset from electric field, so get value at -0.5 by interpolating 0 and 1
     const mX = getAt(magneticFieldX, gx, gy, x - 0.5, y - 0.5)
     const mY = getAt(magneticFieldY, gx, gy, x - 0.5, y - 0.5)
     const mZ = getAt(magneticFieldZ, gx, gy, x - 0.5, y - 0.5)
-    const mAA = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
+    const mEnergy = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
 
     // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * (x-1))
     const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y) - 1))) - 1)
     const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y) - 1))) - 1)
 
+    // Display material as circles. Permittivity and permeability are offset circles from each other.
     const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
     const tileFactorY = Math.min(1, 1 / Math.round(2 * gy / this.output.y!))
 
-    const dx = ((tileFactorX * x) % 1) - 0.5
-    const dy = ((tileFactorY * y) % 1) - 0.5
-    const f = (dx * dx + dy * dy) * Math.sqrt(2 * Math.PI)
+    const dxPermittivity = ((tileFactorX * x) % 1) - 0.5
+    const dyPermittivity = ((tileFactorY * y) % 1) - 0.5
 
-    const dx2 = ((tileFactorX * x + 0.5) % 1) - 0.5
-    const dy2 = ((tileFactorY * y + 0.5) % 1) - 0.5
-    const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
+    const circleDistPermittivity = (dxPermittivity * dxPermittivity + dyPermittivity * dyPermittivity) * Math.sqrt(2 * Math.PI)
+
+    const dxPermeability = ((tileFactorX * x + 0.5) % 1) - 0.5
+    const dyPermeability = ((tileFactorY * y + 0.5) % 1) - 0.5
+    const circleDistPermeability = (dxPermeability * dxPermeability + dyPermeability * dyPermeability) * Math.sqrt(2 * Math.PI)
 
     // Smoothstep
-    const bgX = -nativeSmoothStep(f)
-    const bgY = -nativeSmoothStep(f2)
-    const backgroundX = permittivityValue >= 0.1 ? 1 + bgX : bgX
-    const backgroundY = permeabilityValue >= 0.1 ? 1 + bgY : bgY
+    const bgPermittivity = -nativeSmoothStep(circleDistPermittivity)
+    const bgPermeability = -nativeSmoothStep(circleDistPermeability)
+    const backgroundPermittivity = permittivityValue >= 0.1 ? 1 + bgPermittivity : bgPermittivity
+    const backgroundPermeability = permeabilityValue >= 0.1 ? 1 + bgPermeability : bgPermeability
 
     this.color(
-        Math.min(1, eAA + 0.8 * backgroundX * permittivityValue),
-        Math.min(1, eAA + mAA),
-        Math.min(1, mAA + 0.8 * backgroundY * permeabilityValue))
+        Math.min(1, eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
+        Math.min(1, eEnergy + mEnergy),
+        Math.min(1, mEnergy + 0.8 * backgroundPermeability * permeabilityValue))
 }
 
 // On CPU we can't use float indices so round the coordinates
@@ -82,37 +84,39 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const eX = getAt(electricFieldX, gx, gy, x, y)
     const eY = getAt(electricFieldY, gx, gy, x, y)
     const eZ = getAt(electricFieldZ, gx, gy, x, y)
-    const eAA = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
+    const eEnergy = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
 
     // Magnetic field is offset from electric field, so get value at -0.5 by interpolating 0 and 1
     const mX = getAt(magneticFieldX, gx, gy, x, y)
     const mY = getAt(magneticFieldY, gx, gy, x, y)
     const mZ = getAt(magneticFieldZ, gx, gy, x, y)
-    const mAA = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
+    const mEnergy = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
 
     // Material constants are between 1 and 100, map to [0, 1] using tanh(0.5 * (x-1))
     const permittivityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permittivity, gx, gy, x, y) - 1))) - 1)
     const permeabilityValue = (2 / (1 + Math.exp(-0.5 * (getAt(permeability, gx, gy, x, y) - 1))) - 1)
 
+    // Display material as circles. Permittivity and permeability are offset circles from each other.
     const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
     const tileFactorY = Math.min(1, 1 / Math.round(2 * gy / this.output.y!))
 
-    const dx = ((tileFactorX * fx) % 1) - 0.5
-    const dy = ((tileFactorY * fy) % 1) - 0.5
-    const f = (dx * dx + dy * dy) * Math.sqrt(2 * Math.PI)
+    const dxPermittivity = ((tileFactorX * fx) % 1) - 0.5
+    const dyPermittivity = ((tileFactorY * fy) % 1) - 0.5
 
-    const dx2 = ((tileFactorX * fx + 0.5) % 1) - 0.5
-    const dy2 = ((tileFactorY * fy + 0.5) % 1) - 0.5
-    const f2 = (dx2 * dx2 + dy2 * dy2) * Math.sqrt(2 * Math.PI)
+    const circleDistPermittivity = (dxPermittivity * dxPermittivity + dyPermittivity * dyPermittivity) * Math.sqrt(2 * Math.PI)
+
+    const dxPermeability = ((tileFactorX * fx + 0.5) % 1) - 0.5
+    const dyPermeability = ((tileFactorY * fy + 0.5) % 1) - 0.5
+    const circleDistPermeability = (dxPermeability * dxPermeability + dyPermeability * dyPermeability) * Math.sqrt(2 * Math.PI)
 
     // Smoothstep
-    const bgX = -nativeSmoothStep(f)
-    const bgY = -nativeSmoothStep(f2)
-    const backgroundX = permittivityValue >= 0.1 ? 1 + bgX : bgX
-    const backgroundY = permeabilityValue >= 0.1 ? 1 + bgY : bgY
+    const bgPermittivity = -nativeSmoothStep(circleDistPermittivity)
+    const bgPermeability = -nativeSmoothStep(circleDistPermeability)
+    const backgroundPermittivity = permittivityValue >= 0.1 ? 1 + bgPermittivity : bgPermittivity
+    const backgroundPermeability = permeabilityValue >= 0.1 ? 1 + bgPermeability : bgPermeability
 
     this.color(
-        Math.min(1, eAA + 0.8 * backgroundX * permittivityValue),
-        Math.min(1, eAA + mAA),
-        Math.min(1, mAA + 0.8 * backgroundY * permeabilityValue))
+        Math.min(1, eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
+        Math.min(1, eEnergy + mEnergy),
+        Math.min(1, mEnergy + 0.8 * backgroundPermeability * permeabilityValue))
 }
