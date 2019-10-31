@@ -74,7 +74,7 @@ const defaultPreset = gpuMode === "cpu" ? qualityPresets["Low"] : qualityPresets
 const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
-const defaultPermittivityBrushValue = 3
+const defaultPermittivityBrushValue = 5
 const defaultPermeabilityBrushValue = 1
 const defaultConductivityBrushValue = 0
 const defaultMaterialBrushSize = 5
