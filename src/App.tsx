@@ -74,9 +74,9 @@ const defaultPreset = gpuMode === "cpu" ? qualityPresets["Low"] : qualityPresets
 const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
-const defaultPermittivityBrushValue = 1
+const defaultPermittivityBrushValue = 3
 const defaultPermeabilityBrushValue = 1
-const defaultConductivityBrushValue = 1
+const defaultConductivityBrushValue = 0
 const defaultMaterialBrushSize = 5
 const defaultDrawShapeType = "square"
 
@@ -148,11 +148,11 @@ export default function () {
     const [gpu, setGpu] = useState<GPU | null>(null)
     useEffect(() => {
         if (drawCanvasRef.current) {
-            let gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
+            const gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
 
             // Add native func for gpus here. For cpus we add a normal func when creating the kernel.
             if (gpuMode !== "cpu") {
-                gpu = gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
+                gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
             }
 
             setGpu(gpu)
