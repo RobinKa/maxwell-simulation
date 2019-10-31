@@ -74,8 +74,9 @@ const defaultPreset = gpuMode === "cpu" ? qualityPresets["Low"] : qualityPresets
 const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
-const defaultPermittivityBrushValue = 5
+const defaultPermittivityBrushValue = 1
 const defaultPermeabilityBrushValue = 1
+const defaultConductivityBrushValue = 1
 const defaultMaterialBrushSize = 5
 const defaultDrawShapeType = "square"
 
@@ -215,6 +216,7 @@ export default function () {
     const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
     const [permittivityBrushValue, setPermittivityBrushValue] = useState(defaultPermittivityBrushValue)
     const [permeabilityBrushValue, setPermeabilityBrushValue] = useState(defaultPermeabilityBrushValue)
+    const [conductivityBrushValue, setConductivityBrushValue] = useState(defaultConductivityBrushValue)
     const [signalFrequency, setSignalFrequency] = useState(defaultSignalFrequency)
     const [drawingMaterial, setDrawingMaterial] = useState(false)
     const optionMaterialBrush = 0
@@ -292,7 +294,7 @@ export default function () {
 
             renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
                 simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
-                simData.permittivity.values, simData.permeability.values, gridSize, cellSize)
+                simData.permittivity.values, simData.permeability.values, simData.conductivity.values, gridSize, cellSize)
         }
     }, [simulator, renderSim, gridSize, cellSize, resolutionScale, drawCanvasRef])
 
@@ -325,8 +327,12 @@ export default function () {
             simulator.drawMaterial("permeability", drawShapeType === "square" ?
                 makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
                 makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
+
+            simulator.drawMaterial("conductivity", drawShapeType === "square" ?
+                makeDrawSquareInfo(center, brushHalfSize, conductivityBrushValue) :
+                makeDrawCircleInfo(center, brushHalfSize, conductivityBrushValue))
         }
-    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, drawShapeType])
+    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType])
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
@@ -516,6 +522,7 @@ export default function () {
                                     materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
                                     permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
                                     permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
+                                    conductivityBrushValue={conductivityBrushValue} setConductivityBrushValue={setConductivityBrushValue}
                                     drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
                                     snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.Settings ?
                                         <SettingsComponent

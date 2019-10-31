@@ -390,6 +390,9 @@ export type MaterialBrushMenuProps = {
     permittivityBrushValue: number
     setPermittivityBrushValue: (brushValue: number) => void
 
+    conductivityBrushValue: number
+    setConductivityBrushValue: (brushValue: number) => void
+
     drawShapeType: DrawShapeType
     setDrawShapeType: (drawShapeType: DrawShapeType) => void
 
@@ -413,6 +416,7 @@ export function MaterialBrushMenu(props: MaterialBrushMenuProps) {
                 <LabeledSlider label={brushSizeLabel} value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
                 <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
                 <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
+                <LabeledSlider label="σ value" value={props.conductivityBrushValue} setValue={props.setConductivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
             </div>
         </div>
     )

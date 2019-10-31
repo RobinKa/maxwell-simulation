@@ -14,7 +14,7 @@ export function nativeSmoothStep(x: number) {
 
 export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
     magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-    permittivity: number[][], permeability: number[][], gridSize: number[], cellSize: number) {
+    permittivity: number[][], permeability: number[][], conductivity: number[][], gridSize: number[], cellSize: number) {
     const gx = gridSize[0]
     const gy = gridSize[1]
 
@@ -59,16 +59,18 @@ export function drawGpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const backgroundPermittivity = permittivityValue >= 0.1 ? 1 + bgPermittivity : bgPermittivity
     const backgroundPermeability = permeabilityValue >= 0.1 ? 1 + bgPermeability : bgPermeability
 
+    const background = getAt(conductivity, gx, gy, x, y) / 2000
+
     this.color(
-        Math.min(1, eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
-        Math.min(1, eEnergy + mEnergy),
-        Math.min(1, mEnergy + 0.8 * backgroundPermeability * permeabilityValue))
+        Math.min(1, background + eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
+        Math.min(1, background + eEnergy + mEnergy),
+        Math.min(1, background + mEnergy + 0.8 * backgroundPermeability * permeabilityValue))
 }
 
 // On CPU we can't use float indices so round the coordinates
 export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
     magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-    permittivity: number[][], permeability: number[][], gridSize: number[], cellSize: number) {
+    permittivity: number[][], permeability: number[][], conductivity: number[][], gridSize: number[], cellSize: number) {
     const gx = gridSize[0]
     const gy = gridSize[1]
 
@@ -115,8 +117,10 @@ export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], e
     const backgroundPermittivity = permittivityValue >= 0.1 ? 1 + bgPermittivity : bgPermittivity
     const backgroundPermeability = permeabilityValue >= 0.1 ? 1 + bgPermeability : bgPermeability
 
+    const background = getAt(conductivity, gx, gy, x, y) / 2000
+
     this.color(
-        Math.min(1, eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
-        Math.min(1, eEnergy + mEnergy),
-        Math.min(1, mEnergy + 0.8 * backgroundPermeability * permeabilityValue))
+        Math.min(1, background + eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
+        Math.min(1, background + eEnergy + mEnergy),
+        Math.min(1, background + mEnergy + 0.8 * backgroundPermeability * permeabilityValue))
 }
