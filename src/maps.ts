@@ -4,12 +4,14 @@ export function empty(simulationSettings: SimulationSettings): SimulatorMap {
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
+        conductivity: [],
         shape: simulationSettings.gridSize
     }
 
     for (let y = 0; y < simulationSettings.gridSize[1]; y++) {
         materialMap.permittivity.push(new Array(simulationSettings.gridSize[0]).fill(1))
         materialMap.permeability.push(new Array(simulationSettings.gridSize[0]).fill(1))
+        materialMap.conductivity.push(new Array(simulationSettings.gridSize[0]).fill(0))
     }
 
     const sourceDescriptors: SourceDescriptor[] = []
@@ -25,6 +27,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
+        conductivity: [],
         shape: simulationSettings.gridSize
     }
 
@@ -48,6 +51,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
 
         materialMap.permittivity.push(permittivityRow)
         materialMap.permeability.push(new Array(simulationSettings.gridSize[0]).fill(1))
+        materialMap.conductivity.push(new Array(simulationSettings.gridSize[0]).fill(0))
     }
 
     const sourceDescriptors: SourceDescriptor[] = [{
@@ -68,12 +72,14 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
+        conductivity: [],
         shape: simulationSettings.gridSize
     }
 
     for (let y = 0; y < simulationSettings.gridSize[1]; y++) {
         materialMap.permittivity.push(new Array(simulationSettings.gridSize[0]).fill(1))
         materialMap.permeability.push(new Array(simulationSettings.gridSize[0]).fill(1))
+        materialMap.conductivity.push(new Array(simulationSettings.gridSize[0]).fill(0))
     }
 
     function getCurvePoint(t: number): [number, number] {
@@ -124,6 +130,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
     const materialMap: MaterialMap = {
         permittivity: [],
         permeability: [],
+        conductivity: [],
         shape: simulationSettings.gridSize
     }
 
@@ -139,6 +146,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
     for (let y = 0; y < simulationSettings.gridSize[1]; y++) {
         materialMap.permittivity.push([])
         materialMap.permeability.push(new Array(simulationSettings.gridSize[0]).fill(1))
+        materialMap.conductivity.push(new Array(simulationSettings.gridSize[0]).fill(0))
         for (let x = 0; x < simulationSettings.gridSize[0]; x++) {
             materialMap.permittivity[y].push(isLensPoint([x, y]) ? 3 : 1)
         }

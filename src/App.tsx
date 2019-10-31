@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
+import { GPU, GPUMode, GPUInternalMode, KernelFunction } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
 import { toggleFullScreen, clamp, QualityPreset } from './util'
@@ -76,6 +76,7 @@ const defaultSignalBrushSize = 1
 const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
 const defaultPermittivityBrushValue = 5
 const defaultPermeabilityBrushValue = 1
+const defaultConductivityBrushValue = 0
 const defaultMaterialBrushSize = 5
 const defaultDrawShapeType = "square"
 
@@ -102,8 +103,13 @@ function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]
 }
 
 const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
+    const funcs: KernelFunction[] = [k.getAt]
+    if (gpuMode === "cpu") {
+        funcs.push(k.nativeSmoothStep)
+    }
+
     const kernel = gpuMode !== "cpu" ? gpu.createKernel(k.drawGpu) : gpu.createKernel(k.drawCpu)
-    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([k.getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
+    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions(funcs).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
 export default function () {
@@ -144,9 +150,8 @@ export default function () {
         if (drawCanvasRef.current) {
             const gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
 
-            if (gpuMode === "cpu") {
-                gpu.addFunction(k.nativeSmoothStep)
-            } else {
+            // Add native func for gpus here. For cpus we add a normal func when creating the kernel.
+            if (gpuMode !== "cpu") {
                 gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
             }
 
@@ -166,6 +171,7 @@ export default function () {
                 // Load material
                 simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
                 simulator.loadPermeability(simulatorMap.materialMap.permeability)
+                simulator.loadConductivity(simulatorMap.materialMap.conductivity)
 
                 // Load settings
                 setDt(simulatorMap.simulationSettings.dt)
@@ -215,6 +221,7 @@ export default function () {
     const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
     const [permittivityBrushValue, setPermittivityBrushValue] = useState(defaultPermittivityBrushValue)
     const [permeabilityBrushValue, setPermeabilityBrushValue] = useState(defaultPermeabilityBrushValue)
+    const [conductivityBrushValue, setConductivityBrushValue] = useState(defaultConductivityBrushValue)
     const [signalFrequency, setSignalFrequency] = useState(defaultSignalFrequency)
     const [drawingMaterial, setDrawingMaterial] = useState(false)
     const optionMaterialBrush = 0
@@ -292,7 +299,7 @@ export default function () {
 
             renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
                 simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
-                simData.permittivity.values, simData.permeability.values, gridSize, cellSize)
+                simData.permittivity.values, simData.permeability.values, simData.conductivity.values, gridSize, cellSize)
         }
     }, [simulator, renderSim, gridSize, cellSize, resolutionScale, drawCanvasRef])
 
@@ -325,8 +332,12 @@ export default function () {
             simulator.drawMaterial("permeability", drawShapeType === "square" ?
                 makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
                 makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
+
+            simulator.drawMaterial("conductivity", drawShapeType === "square" ?
+                makeDrawSquareInfo(center, brushHalfSize, conductivityBrushValue) :
+                makeDrawCircleInfo(center, brushHalfSize, conductivityBrushValue))
         }
-    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, drawShapeType])
+    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType])
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
@@ -420,6 +431,7 @@ export default function () {
                 return {
                     permittivity: simData.permittivity.values.toArray() as number[][],
                     permeability: simData.permeability.values.toArray() as number[][],
+                    conductivity: simData.conductivity.values.toArray() as number[][],
                     shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
                 }
             }
@@ -516,6 +528,7 @@ export default function () {
                                     materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
                                     permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
                                     permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
+                                    conductivityBrushValue={conductivityBrushValue} setConductivityBrushValue={setConductivityBrushValue}
                                     drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
                                     snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.Settings ?
                                         <SettingsComponent

@@ -1,7 +1,7 @@
 import { GPU, IKernelRunShortcut, Texture, KernelFunction } from "gpu.js"
 import * as k from "./kernels/simulation"
 
-export type MaterialType = "permittivity" | "permeability"
+export type MaterialType = "permittivity" | "permeability" | "conductivity"
 
 export type DrawShapeType = "square" | "circle"
 
@@ -53,8 +53,22 @@ export type SimulationData = {
 
     permittivity: ScalarField2D
     permeability: ScalarField2D
+    conductivity: ScalarField2D
 
     electricSourceFieldZ: ScalarField2D
+}
+
+function getFieldByMaterialType(simulationData: SimulationData, materialType: MaterialType) {
+    switch (materialType) {
+        case "permittivity":
+            return simulationData.permittivity
+        case "permeability":
+            return simulationData.permeability
+        case "conductivity":
+            return simulationData.conductivity
+    }
+
+    throw new Error("Unhandled material type: " + materialType)
 }
 
 export interface Simulator {
@@ -116,7 +130,8 @@ export class FDTDSimulator implements Simulator {
             magneticField: [0, 1, 2].map(i => makeField(`m${i}`, 0)) as [ScalarField2D, ScalarField2D, ScalarField2D],
             electricSourceFieldZ: makeField("es2", 0),
             permittivity: makeField("permittivity", 1),
-            permeability: makeField("permeability", 1)
+            permeability: makeField("permeability", 1),
+            conductivity: makeField("conductivity", 0)
         }
 
         this.drawOnTexture = {
@@ -154,9 +169,11 @@ export class FDTDSimulator implements Simulator {
 
         this.data.permittivity.shape = gridSize
         this.data.permeability.shape = gridSize
+        this.data.conductivity.shape = gridSize
 
         this.data.permittivity.values = this.copyTextureWithBounds("permittivity")(this.data.permittivity.values, oldShape, 1) as Texture
         this.data.permeability.values = this.copyTextureWithBounds("permeability")(this.data.permeability.values, oldShape, 1) as Texture
+        this.data.conductivity.values = this.copyTextureWithBounds("conductivity")(this.data.conductivity.values, oldShape, 1) as Texture
 
         this.resetFields()
     }
@@ -171,14 +188,15 @@ export class FDTDSimulator implements Simulator {
         const el = this.data.electricField.map(f => f.values)
         const mag = this.data.magneticField.map(f => f.values)
         const perm = this.data.permittivity.values
+        const cond = this.data.conductivity.values
 
         const injectedElZ = this.injectSource(this.data.electricSourceFieldZ.values, el[2], dt) as Texture
         this.data.electricSourceFieldZ.values = this.decaySource(this.copyTexture("es2")(this.data.electricSourceFieldZ.values), dt) as Texture
 
         // d/dt E(x, t) = curl B(x, t) / ε
-        this.data.electricField[0].values = this.updateElectric[0](mag[2], perm, this.copyTexture("e0")(el[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.electricField[1].values = this.updateElectric[1](mag[2], perm, this.copyTexture("e1")(el[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.electricField[2].values = this.updateElectric[2](mag[0], mag[1], perm, injectedElZ, dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.electricField[0].values = this.updateElectric[0](mag[2], perm, cond, this.copyTexture("e0")(el[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.electricField[1].values = this.updateElectric[1](mag[2], perm, cond, this.copyTexture("e1")(el[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.electricField[2].values = this.updateElectric[2](mag[0], mag[1], perm, cond, injectedElZ, dt, this.cellSize, this.reflectiveBoundary) as Texture
 
         this.data.time += dt / 2
     }
@@ -187,11 +205,12 @@ export class FDTDSimulator implements Simulator {
         const el = this.data.electricField.map(f => f.values)
         const mag = this.data.magneticField.map(f => f.values)
         const perm = this.data.permeability.values
+        const cond = this.data.conductivity.values
 
         // d/dt B(x, t) = -curl E(x, t) / µ
-        this.data.magneticField[0].values = this.updateMagnetic[0](el[2], perm, this.copyTexture("m0")(mag[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.magneticField[1].values = this.updateMagnetic[1](el[2], perm, this.copyTexture("m1")(mag[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.magneticField[2].values = this.updateMagnetic[2](el[0], el[1], perm, this.copyTexture("m2")(mag[2]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.magneticField[0].values = this.updateMagnetic[0](el[2], perm, cond, this.copyTexture("m0")(mag[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.magneticField[1].values = this.updateMagnetic[1](el[2], perm, cond, this.copyTexture("m1")(mag[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.data.magneticField[2].values = this.updateMagnetic[2](el[0], el[1], perm, cond, this.copyTexture("m2")(mag[2]), dt, this.cellSize, this.reflectiveBoundary) as Texture
 
         this.data.time += dt / 2
     }
@@ -210,6 +229,7 @@ export class FDTDSimulator implements Simulator {
     resetMaterials = () => {
         this.data.permeability.values = this.makeFieldTexture("permeability")(1) as Texture
         this.data.permittivity.values = this.makeFieldTexture("permittivity")(1) as Texture
+        this.data.conductivity.values = this.makeFieldTexture("conductivity")(0) as Texture
     }
 
     private drawShape = (field: ScalarField2D, fieldName: string, drawInfo: DrawInfo, keep: number) => {
@@ -229,12 +249,12 @@ export class FDTDSimulator implements Simulator {
     }
 
     drawMaterial = (materialType: MaterialType, drawInfo: DrawInfo) => {
-        const materialField = materialType === "permeability" ? this.data.permeability : this.data.permittivity
+        const materialField = getFieldByMaterialType(this.data, materialType)
         this.drawShape(materialField, materialType, drawInfo, 0)
     }
 
     injectSignal = (drawInfo: DrawInfo, dt: number) => {
-        this.drawShape(this.data.electricSourceFieldZ, "es2", {...drawInfo, value: drawInfo.value * dt}, 1)
+        this.drawShape(this.data.electricSourceFieldZ, "es2", { ...drawInfo, value: drawInfo.value * dt }, 1)
     }
 
     loadPermittivity = (permittivity: number[][]) => {
@@ -243,6 +263,10 @@ export class FDTDSimulator implements Simulator {
 
     loadPermeability = (permeability: number[][]) => {
         this.data.permeability.values = this.copyTextureWithBounds("loadPermeability")(permeability, [permeability[0].length, permeability.length], 1) as Texture
+    }
+
+    loadConductivity = (conductivity: number[][]) => {
+        this.data.conductivity.values = this.copyTextureWithBounds("loadConductivity")(conductivity, [conductivity[0].length, conductivity.length], 0) as Texture
     }
 
     getData = () => this.data

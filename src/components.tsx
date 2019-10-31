@@ -1,10 +1,9 @@
 import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect, MouseEventHandler } from "react"
-import { SimulatorMap, SimulationSettings, MaterialMap } from "./serialization"
+import { SimulatorMap, SimulationSettings } from "./serialization"
 import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
 import { QualityPreset } from "./util"
-import { shareSimulatorMap } from "./share"
 
 export type CollapsibleContainerProps = {
     children?: ReactElement<any> | ReactElement<any>[]
@@ -117,94 +116,6 @@ export function OptionSelector(props: OptionSelectorProps) {
     )
 }
 
-export type SaveLoadComponentProps = {
-    simulator: FDTDSimulator | null
-    gridSize: [number, number]
-
-    shareId: string | null
-    setShareId: (shareId: string | null) => void
-
-    dt: number
-    cellSize: number
-}
-
-export function SaveLoadComponent(props: SaveLoadComponentProps) {
-    const { shareId, setShareId, simulator, dt, cellSize, gridSize } = props
-
-    const getMaterialMap = useMemo<() => (MaterialMap | null)>(() => {
-        return () => {
-            if (simulator) {
-                const simData = simulator.getData()
-                return {
-                    permittivity: simData.permittivity.values.toArray() as number[][],
-                    permeability: simData.permeability.values.toArray() as number[][],
-                    shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
-                }
-            }
-
-            return null
-        }
-    }, [simulator])
-
-    const onGenerateShareUrlClicked = useCallback(() => {
-        const materialMap = getMaterialMap()
-        if (materialMap) {
-            shareSimulatorMap({
-                materialMap: materialMap,
-                simulationSettings: {
-                    cellSize: cellSize,
-                    dt: dt,
-                    gridSize: gridSize,
-                    simulationSpeed: 1
-                },
-                sourceDescriptors: []
-            }).then(shareId => setShareId(shareId)).catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
-        }
-    }, [getMaterialMap, setShareId, dt, cellSize, gridSize])
-
-    const shareUrl = useMemo(() => {
-        return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
-    }, [shareId])
-    const shareUrlTextRef = useRef<HTMLInputElement>(null)
-
-    const onCopyClicked = useCallback(() => {
-        if (shareUrlTextRef.current) {
-            shareUrlTextRef.current.select()
-            document.execCommand("copy")
-        }
-    }, [shareUrlTextRef])
-
-    const onShareClicked = useCallback(() => {
-        const nav = navigator as any
-        if (nav.share) {
-            nav.share({
-                title: "EM Simulator",
-                text: "Check out what I made in this interactive web-based simulator for electromagnetic waves!",
-                url: shareUrl
-            }).then(() => console.log("Shared")).catch((err: any) => console.error(`Share failed: ${err}`))
-        }
-    }, [shareUrl])
-
-    return (
-        <div style={{ padding: "10px" }}>
-            <div>
-                <div>
-                    <button onClick={onGenerateShareUrlClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Generate share url</button>
-                </div>
-                <div>
-                    {shareUrl &&
-                        <div>
-                            <input ref={shareUrlTextRef} readOnly type="text" value={shareUrl} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px", width: "70%" }} />
-                            <button onClick={onCopyClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Copy</button>
-                            {(navigator as any).share !== undefined && <button onClick={onShareClicked} style={{ background: "rgba(50, 50, 50, 100)", border: "0px", color: "white", margin: "2px" }}>Share</button>}
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-    )
-}
-
 export type ExamplesComponentProps = {
     simulator: FDTDSimulator | null
 
@@ -228,6 +139,7 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
             simulator.resetFields()
             simulator.loadPermeability(simulatorMap.materialMap.permeability)
             simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
+            simulator.loadConductivity(simulatorMap.materialMap.conductivity)
         }
 
         const loadedSources = simulatorMap.sourceDescriptors.map(desc => {
@@ -390,6 +302,9 @@ export type MaterialBrushMenuProps = {
     permittivityBrushValue: number
     setPermittivityBrushValue: (brushValue: number) => void
 
+    conductivityBrushValue: number
+    setConductivityBrushValue: (brushValue: number) => void
+
     drawShapeType: DrawShapeType
     setDrawShapeType: (drawShapeType: DrawShapeType) => void
 
@@ -413,6 +328,7 @@ export function MaterialBrushMenu(props: MaterialBrushMenuProps) {
                 <LabeledSlider label={brushSizeLabel} value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
                 <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
                 <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
+                <LabeledSlider label="σ value" value={props.conductivityBrushValue} setValue={props.setConductivityBrushValue} min={0} max={20} step={0.25} allowNegative={true} />
             </div>
         </div>
     )
