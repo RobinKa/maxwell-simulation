@@ -167,6 +167,7 @@ export default function () {
                 // Load material
                 simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
                 simulator.loadPermeability(simulatorMap.materialMap.permeability)
+                simulator.loadConductivity(simulatorMap.materialMap.conductivity)
 
                 // Load settings
                 setDt(simulatorMap.simulationSettings.dt)
@@ -426,6 +427,7 @@ export default function () {
                 return {
                     permittivity: simData.permittivity.values.toArray() as number[][],
                     permeability: simData.permeability.values.toArray() as number[][],
+                    conductivity: simData.conductivity.values.toArray() as number[][],
                     shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
                 }
             }
