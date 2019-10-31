@@ -139,6 +139,7 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
             simulator.resetFields()
             simulator.loadPermeability(simulatorMap.materialMap.permeability)
             simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
+            simulator.loadConductivity(simulatorMap.materialMap.conductivity)
         }
 
         const loadedSources = simulatorMap.sourceDescriptors.map(desc => {
