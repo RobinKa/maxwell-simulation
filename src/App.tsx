@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { GPU, GPUMode, GPUInternalMode } from "gpu.js"
+import { GPU, GPUMode, GPUInternalMode, KernelFunction } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
 import { toggleFullScreen, clamp, QualityPreset } from './util'
@@ -103,8 +103,13 @@ function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]
 }
 
 const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
+    const funcs: KernelFunction[] = [k.getAt]
+    if (gpuMode === "cpu") {
+        funcs.push(k.nativeSmoothStep)
+    }
+
     const kernel = gpuMode !== "cpu" ? gpu.createKernel(k.drawGpu) : gpu.createKernel(k.drawCpu)
-    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions([k.getAt]).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
+    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions(funcs).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
 export default function () {
@@ -143,12 +148,11 @@ export default function () {
     const [gpu, setGpu] = useState<GPU | null>(null)
     useEffect(() => {
         if (drawCanvasRef.current) {
-            const gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
+            let gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
 
-            if (gpuMode === "cpu") {
-                gpu.addFunction(k.nativeSmoothStep)
-            } else {
-                gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
+            // Add native func for gpus here. For cpus we add a normal func when creating the kernel.
+            if (gpuMode !== "cpu") {
+                gpu = gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
             }
 
             setGpu(gpu)
