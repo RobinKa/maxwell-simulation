@@ -84,14 +84,14 @@ export function decodeSimulatorMap(encodedSimulatorMap: EncodedSimulatorMap): Si
 }
 
 export function encodeMaterialMap(materialMap: MaterialMap): string {
-    const materialMapArray = new Float32Array(2 + 2 * materialMap.shape[0] * materialMap.shape[1])
+    const materialMapArray = new Float32Array(2 + 3 * materialMap.shape[0] * materialMap.shape[1])
 
     materialMapArray[0] = materialMap.shape[0]
     materialMapArray[1] = materialMap.shape[1]
 
     for (let y = 0; y < materialMap.shape[1]; y++) {
         for (let x = 0; x < materialMap.shape[0]; x++) {
-            const index = y * materialMap.shape[0] * 2 + x * 2
+            const index = y * materialMap.shape[0] * 3 + x * 3
             materialMapArray[2 + index] = materialMap.permittivity[y][x]
             materialMapArray[2 + index + 1] = materialMap.permeability[y][x]
             materialMapArray[2 + index + 2] = materialMap.conductivity[y][x]
