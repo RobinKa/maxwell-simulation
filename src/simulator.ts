@@ -173,7 +173,7 @@ export class FDTDSimulator implements Simulator {
 
         this.data.permittivity.values = this.copyTextureWithBounds("permittivity")(this.data.permittivity.values, oldShape, 1) as Texture
         this.data.permeability.values = this.copyTextureWithBounds("permeability")(this.data.permeability.values, oldShape, 1) as Texture
-        this.data.conductivity.values = this.copyTextureWithBounds("conductivity")(this.data.conductivity.values, oldShape, 1) as Texture
+        this.data.conductivity.values = this.copyTextureWithBounds("conductivity")(this.data.conductivity.values, oldShape, 0) as Texture
 
         this.resetFields()
     }
