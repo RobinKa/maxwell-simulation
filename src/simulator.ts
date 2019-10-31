@@ -254,7 +254,7 @@ export class FDTDSimulator implements Simulator {
     }
 
     injectSignal = (drawInfo: DrawInfo, dt: number) => {
-        this.drawShape(this.data.electricSourceFieldZ, "es2", {...drawInfo, value: drawInfo.value * dt}, 1)
+        this.drawShape(this.data.electricSourceFieldZ, "es2", { ...drawInfo, value: drawInfo.value * dt }, 1)
     }
 
     loadPermittivity = (permittivity: number[][]) => {
