@@ -111,7 +111,7 @@ export class FDTDSimulator implements Simulator {
     constructor(readonly gpu: GPU, private gridSize: [number, number], private cellSize: number, public reflectiveBoundary: boolean) {
         const makeKernel = (kernel: KernelFunction) => {
             const runKernel = this.gpu.createKernel(kernel).setOutput(this.gridSize).setWarnVarUsage(false)
-                .setPipeline(true).setTactic("performance").setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
+                .setPipeline(true).setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
             this.kernels.push(runKernel)
             return runKernel
         }

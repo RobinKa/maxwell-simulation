@@ -109,7 +109,7 @@ const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
     }
 
     const kernel = gpuMode !== "cpu" ? gpu.createKernel(k.drawGpu) : gpu.createKernel(k.drawCpu)
-    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions(funcs).setWarnVarUsage(false).setTactic("performance").setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
+    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions(funcs).setWarnVarUsage(false).setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
 }
 
 export default function () {
