@@ -1,272 +1,216 @@
-import { IKernelFunctionThis } from "gpu.js"
+export const updateAlphaBeta = `
+    precision highp float;
 
-export function isOutOfBounds(shapeX: number, shapeY: number, x: number, y: number): number {
-    return x < 0 || x >= shapeX || y < 0 || y >= shapeY ? 1 : 0
-}
+    uniform sampler2D material;
+    uniform float dt;
+    uniform float cellSize;
 
-export function makeFieldTexture(this: IKernelFunctionThis, value: number) {
-    return value
-}
+    varying vec2 uv;
 
-export function copyTexture(this: IKernelFunctionThis, texture: number[][]) {
-    return texture[this.thread.y!][this.thread.x]
-}
+    void main() {
+        // Get material values
+        vec3 mat = texture2D(material, uv).rgb;
+        float permeability = mat.x;
+        float permittivity = mat.y;
+        float conductivity = mat.z;
 
-export function copyTextureWithBounds(this: IKernelFunctionThis, texture: number[][], boundsX: number, boundsY: number, outOfBoundsValue: number) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const bounds: [number, number] = [boundsX, boundsY]
+        // Calculate alpha and beta for electric field
+        float cEl = conductivity * dt / (2.0 * permeability);
+        float dEl = 1.0 / (1.0 + cEl);
+        float alphaEl = (1.0 - cEl) * dEl;
+        float betaEl = dt / (permeability * cellSize) * dEl;
 
-    if (x < 0 || y < 0 || x >= bounds[0] || y >= bounds[1]) {
-        return outOfBoundsValue
+        // Calculate alpha and beta for magnetic field
+        float cMag = conductivity * dt / (2.0 * permittivity);
+        float dMag = 1.0 / (1.0 + cMag);
+        float alphaMag = (1.0 - cMag) * dMag;
+        float betaMag = dt / (permittivity * cellSize) * dMag;
+
+        gl_FragColor = vec4(alphaEl, betaEl, alphaMag, betaMag);
     }
+`
 
-    return texture[y][x]
-}
+export const updateElectric = `
+    precision highp float;
 
-export function copyTextureWithBoundsFromEncoded(this: IKernelFunctionThis, texture: Uint8Array, boundsX: number, boundsY: number, outOfBoundsValue: number) {
-    const x = this.thread.x
-    const y = this.thread.y!
-    const gx = this.output.x
-    const bounds: [number, number] = [boundsX, boundsY]
+    uniform sampler2D electricField;
+    uniform sampler2D magneticField;
+    uniform sampler2D alphaBetaField;
+    uniform vec2 relativeCellSize;
+    uniform bool reflectiveBoundary;
 
-    if (x < 0 || y < 0 || x >= bounds[0] || y >= bounds[1]) {
-        return outOfBoundsValue
-    }
+    varying vec2 uv;
 
-    const u1 = texture[y * gx * 4 + x * 4 + 0]
-    const u2 = texture[y * gx * 4 + x * 4 + 1]
-    const u3 = texture[y * gx * 4 + x * 4 + 2]
-    const u4 = texture[y * gx * 4 + x * 4 + 3]
+    void main() {
+        if (!reflectiveBoundary) {
+            vec2 b = 2.0 * relativeCellSize;
 
-    const sign = Math.pow(-1, (u1 >>> 7) & 1)
-    const exp = ((u1 & 0x7F) << 1) + ((u2 & 0x80) >>> 7) - 127
-    const mant = ((u2 & 0x7F) << (7 + 8)) + (u3 << 8) + u4
+            float xAtMinBound = uv.x < b.x ? relativeCellSize.x : 0.0;
+            float xAtMaxBound = uv.x + b.x >= 1.0 ? -relativeCellSize.x : 0.0;
+            float yAtMinBound = uv.y < b.y ? relativeCellSize.y : 0.0;
+            float yAtMaxBound = uv.y + b.y >= 1.0 ? -relativeCellSize.y : 0.0;
 
-    let mantDec = 1
-    for (let i = 0; i < 23; i++) {
-        mantDec += ((mant >>> i) & 1) / Math.pow(2, 22 - i)
-    }
-
-    return Math.pow(2, exp)
-    //return sign * mantDec * Math.pow(2, exp)
-}
-
-export function drawSquare(this: IKernelFunctionThis, posX: number, posY: number, size: number, value: number, keep: number, texture: number[][]) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
-    const pos: [number, number] = [posX, posY]
-
-    const oldValue = (isOutOfBounds(x, y, gx, gy) * texture[y][x])
-
-    const within = Math.max(Math.abs(pos[0] - x), Math.abs(pos[1] - y)) < size
-
-    return within ? value + keep * oldValue : oldValue
-}
-
-export function drawCircle(this: IKernelFunctionThis, posX: number, posY: number, radius: number, value: number, keep: number, texture: number[][]) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
-    const pos: [number, number] = [posX, posY]
-
-    const oldValue = (isOutOfBounds(x, y, gx, gy) * texture[y][x])
-
-    const dx = pos[0] - x
-    const dy = pos[1] - y
-
-    const within = dx * dx + dy * dy < radius * radius
-
-    return within ? value + keep * oldValue : oldValue
-}
-
-export function injectSource(this: IKernelFunctionThis, source: number[][], field: number[][], dt: number) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
-
-    return (isOutOfBounds(x, y, gx, gy) * field[y][x]) + (isOutOfBounds(x, y, gx, gy) * source[y][x]) * dt
-}
-
-export function decaySource(this: IKernelFunctionThis, source: number[][], dt: number) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
-
-    return (isOutOfBounds(x, y, gx, gy) * source[y][x]) * Math.pow(0.1, dt)
-}
-
-export function updateMagneticX(this: IKernelFunctionThis, electricFieldZ: number[][], permeability: number[][], conductivity: number[][], magneticFieldX: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
-
-    if (!reflectiveBoundary) {
-        const xAtMinBound = x < 2 ? 1 : 0
-        const xAtMaxBound = x + 2 >= gx ? -1 : 0
-        const yAtMinBound = y < 2 ? 1 : 0
-        const yAtMaxBound = y + 2 >= gy ? -1 : 0
-        if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return magneticFieldX[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+            if (xAtMinBound != 0.0 || xAtMaxBound != 0.0 || yAtMinBound != 0.0 || yAtMaxBound != 0.0) {
+                gl_FragColor = texture2D(electricField, vec2(
+                    uv.x + xAtMinBound + xAtMaxBound,
+                    uv.y + yAtMinBound + yAtMaxBound
+                ));
+                return;
+            }
         }
+
+        vec2 alphaBeta = texture2D(alphaBetaField, uv).rg;
+        
+        vec3 el = texture2D(electricField, uv).rgb;
+        vec3 mag = texture2D(magneticField, uv).rgb;
+        vec3 magXN = texture2D(magneticField, uv - vec2(relativeCellSize.x, 0.0)).rgb;
+        vec3 magYN = texture2D(magneticField, uv - vec2(0.0, relativeCellSize.y)).rgb;
+
+        vec3 newEl = vec3(
+            // d_Y Z - d_Z Y, but d_Z = 0 in 2d
+            alphaBeta.x * el.x + alphaBeta.y * (mag.z - magYN.z),
+
+            // d_Z X - d_X Z, but d_Z = 0 in 2d
+            alphaBeta.x * el.y + alphaBeta.y * (magXN.z - mag.z),
+
+            // d_X Y - d_Y X
+            alphaBeta.x * el.z + alphaBeta.y * ((mag.y - magXN.y) - (mag.x - magYN.x))
+        );
+
+        gl_FragColor = vec4(newEl, 0.0);
     }
+`
 
-    const perm = (isOutOfBounds(x, y, gx, gy) * permeability[y][x])
-    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
-    const c = cond * dt / (2 * perm)
-    const d = 1 / (1 + c)
-    const alpha = (1 - c) * d
-    const beta = dt / (perm * cellSize) * d
+export const updateMagnetic = `
+    precision highp float;
 
-    // d_Y Z - d_Z Y, but d_Z = 0 in 2d
-    return alpha * (isOutOfBounds(x, y, gx, gy) * magneticFieldX[y][x]) - beta * (
-        ((isOutOfBounds(x, y + 1, gx, gy) * electricFieldZ[y + 1][x]) - (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x])))
-}
+    uniform sampler2D electricField;
+    uniform sampler2D magneticField;
+    uniform sampler2D alphaBetaField;
+    uniform vec2 relativeCellSize;
+    uniform bool reflectiveBoundary;
 
-export function updateMagneticY(this: IKernelFunctionThis, electricFieldZ: number[][], permeability: number[][], conductivity: number[][], magneticFieldY: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
+    varying vec2 uv;
 
-    if (!reflectiveBoundary) {
-        const xAtMinBound = x < 2 ? 1 : 0
-        const xAtMaxBound = x + 2 >= gx ? -1 : 0
-        const yAtMinBound = y < 2 ? 1 : 0
-        const yAtMaxBound = y + 2 >= gy ? -1 : 0
-        if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return magneticFieldY[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
+    void main() {
+        if (!reflectiveBoundary) {
+            vec2 b = 2.0 * relativeCellSize;
+
+            float xAtMinBound = uv.x < b.x ? relativeCellSize.x : 0.0;
+            float xAtMaxBound = uv.x + b.x >= 1.0 ? -relativeCellSize.x : 0.0;
+            float yAtMinBound = uv.y < b.y ? relativeCellSize.y : 0.0;
+            float yAtMaxBound = uv.y + b.y >= 1.0 ? -relativeCellSize.y : 0.0;
+
+            if (xAtMinBound != 0.0 || xAtMaxBound != 0.0 || yAtMinBound != 0.0 || yAtMaxBound != 0.0) {
+                gl_FragColor = texture2D(magneticField, vec2(
+                    uv.x + xAtMinBound + xAtMaxBound,
+                    uv.y + yAtMinBound + yAtMaxBound
+                ));
+                return;
+            }
         }
+
+        vec2 alphaBeta = texture2D(alphaBetaField, uv).ba;
+
+        vec3 mag = texture2D(magneticField, uv).rgb;
+        vec3 el = texture2D(electricField, uv).rgb;
+        vec3 elXP = texture2D(electricField, uv + vec2(relativeCellSize.x, 0.0)).rgb;
+        vec3 elYP = texture2D(electricField, uv + vec2(0.0, relativeCellSize.y)).rgb;
+
+        vec3 newMag = vec3(
+            // d_Y Z - d_Z Y, but d_Z = 0 in 2d
+            alphaBeta.x * mag.x - alphaBeta.y * (elYP.z - el.z),
+
+            // d_Z X - d_X Z, but d_Z = 0 in 2d
+            alphaBeta.x * mag.y - alphaBeta.y * (el.z - elXP.z),
+
+            // d_X Y - d_Y X
+            alphaBeta.x * mag.z - alphaBeta.y * ((elXP.y - el.y) - (elYP.x - el.x))
+        );
+
+        gl_FragColor = vec4(newMag, 0.0);
     }
+`
 
-    const perm = (isOutOfBounds(x, y, gx, gy) * permeability[y][x])
-    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
-    const c = cond * dt / (2 * perm)
-    const d = 1 / (1 + c)
-    const alpha = (1 - c) * d
-    const beta = dt / (perm * cellSize) * d
+export const injectSource = `
+    precision highp float;
 
-    // d_Z X - d_X Z, but d_Z = 0 in 2d
-    return alpha * (isOutOfBounds(x, y, gx, gy) * magneticFieldY[y][x]) - beta * (
-        -((isOutOfBounds(x + 1, y, gx, gy) * electricFieldZ[y][x + 1]) - (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x])))
-}
+    uniform sampler2D sourceField;
+    uniform sampler2D field;
+    uniform float dt;
 
-export function updateMagneticZ(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], permeability: number[][], conductivity: number[][], magneticFieldZ: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
+    varying vec2 uv;
 
-    if (!reflectiveBoundary) {
-        const xAtMinBound = x < 2 ? 1 : 0
-        const xAtMaxBound = x + 2 >= gx ? -1 : 0
-        const yAtMinBound = y < 2 ? 1 : 0
-        const yAtMaxBound = y + 2 >= gy ? -1 : 0
-        if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return magneticFieldZ[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
-        }
+    void main() {
+        vec4 source = texture2D(sourceField, uv);
+        vec4 field = texture2D(field, uv);
+
+        gl_FragColor = field + dt * source;
     }
+`
 
-    const perm = (isOutOfBounds(x, y, gx, gy) * permeability[y][x])
-    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
-    const c = cond * dt / (2 * perm)
-    const d = 1 / (1 + c)
-    const alpha = (1 - c) * d
-    const beta = dt / (perm * cellSize) * d
+export const decaySource = `
+    precision highp float;
 
-    // d_X Y - d_Y X
-    return alpha * (isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x]) - beta * (
-        ((isOutOfBounds(x + 1, y, gx, gy) * electricFieldY[y][x + 1]) - (isOutOfBounds(x, y, gx, gy) * electricFieldY[y][x])) -
-        ((isOutOfBounds(x, y + 1, gx, gy) * electricFieldX[y + 1][x]) - (isOutOfBounds(x, y, gx, gy) * electricFieldX[y][x])))
-}
+    uniform sampler2D sourceField;
+    uniform float dt;
 
-export function updateElectricX(this: IKernelFunctionThis, magneticFieldZ: number[][], permittivity: number[][], conductivity: number[][], electricFieldX: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
+    varying vec2 uv;
 
-    if (!reflectiveBoundary) {
-        const xAtMinBound = x < 2 ? 1 : 0
-        const xAtMaxBound = x + 2 >= gx ? -1 : 0
-        const yAtMinBound = y < 2 ? 1 : 0
-        const yAtMaxBound = y + 2 >= gy ? -1 : 0
-        if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return electricFieldX[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
-        }
+    void main() {
+        vec4 source = texture2D(sourceField, uv);
+        vec4 decayedSource = source * pow(0.1, dt);
+
+        gl_FragColor = decayedSource;
     }
+`
 
-    const perm = (isOutOfBounds(x, y, gx, gy) * permittivity[y][x])
-    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
-    const c = cond * dt / (2 * perm)
-    const d = 1 / (1 + c)
-    const alpha = (1 - c) * d
-    const beta = dt / (perm * cellSize) * d
+export const drawSquare = `
+    precision highp float;
 
-    // d_Y Z - d_Z Y, but d_Z = 0 in 2d
-    return alpha * (isOutOfBounds(x, y, gx, gy) * electricFieldX[y][x]) + beta * (
-        ((isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x]) - (isOutOfBounds(x, y - 1, gx, gy) * magneticFieldZ[y - 1][x])))
-}
+    uniform sampler2D texture;
+    uniform vec2 pos;
+    uniform vec4 value;
+    uniform float size;
+    uniform vec4 keep;
 
-export function updateElectricY(this: IKernelFunctionThis, magneticFieldZ: number[][], permittivity: number[][], conductivity: number[][], electricFieldY: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
+    varying vec2 uv;
 
-    if (!reflectiveBoundary) {
-        const xAtMinBound = x < 2 ? 1 : 0
-        const xAtMaxBound = x + 2 >= gx ? -1 : 0
-        const yAtMinBound = y < 2 ? 1 : 0
-        const yAtMaxBound = y + 2 >= gy ? -1 : 0
-        if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return electricFieldY[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
-        }
+    void main() {
+        vec2 d = abs(pos.xy - uv.xy);
+        vec4 oldValue = texture2D(texture, uv);
+        bool within = max(d.x, d.y) < size;
+
+        gl_FragColor = within ? value + keep * oldValue : oldValue;
     }
+`
 
-    const perm = (isOutOfBounds(x, y, gx, gy) * permittivity[y][x])
-    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
-    const c = cond * dt / (2 * perm)
-    const d = 1 / (1 + c)
-    const alpha = (1 - c) * d
-    const beta = dt / (perm * cellSize) * d
+export const drawCircle = `
+    precision highp float;
 
-    // d_Z X - d_X Z, but d_Z = 0 in 2d
-    return alpha * (isOutOfBounds(x, y, gx, gy) * electricFieldY[y][x]) + beta * (
-        -((isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x]) - (isOutOfBounds(x - 1, y, gx, gy) * magneticFieldZ[y][x - 1])))
-}
+    uniform sampler2D texture;
+    uniform vec2 pos;
+    uniform vec4 value;
+    uniform float radius;
+    uniform vec4 keep;
 
-export function updateElectricZ(this: IKernelFunctionThis, magneticFieldX: number[][], magneticFieldY: number[][], permittivity: number[][], conductivity: number[][], electricFieldZ: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
-    const x = this.thread.x as number
-    const y = this.thread.y! as number
-    const gx = this.output.x as number
-    const gy = this.output.y as number
+    varying vec2 uv;
 
-    if (!reflectiveBoundary) {
-        const xAtMinBound = x < 2 ? 1 : 0
-        const xAtMaxBound = x + 2 >= gx ? -1 : 0
-        const yAtMinBound = y < 2 ? 1 : 0
-        const yAtMaxBound = y + 2 >= gy ? -1 : 0
-        if (xAtMinBound !== 0 || xAtMaxBound !== 0 || yAtMinBound !== 0 || yAtMaxBound !== 0) {
-            return electricFieldZ[y + yAtMinBound + yAtMaxBound][x + xAtMinBound + xAtMaxBound]
-        }
+    void main() {
+        vec2 d = pos.xy - uv.xy;
+        vec4 oldValue = texture2D(texture, uv);
+        bool within = d.x * d.x + d.y * d.y < radius * radius;
+
+        gl_FragColor = within ? value + keep * oldValue : oldValue;
     }
+`
 
-    const perm = (isOutOfBounds(x, y, gx, gy) * permittivity[y][x])
-    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
-    const c = cond * dt / (2 * perm)
-    const d = 1 / (1 + c)
-    const alpha = (1 - c) * d
-    const beta = dt / (perm * cellSize) * d
-
-    // d_X Y - d_Y X
-    return alpha * (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x]) + beta * (
-        ((isOutOfBounds(x, y, gx, gy) * magneticFieldY[y][x]) - (isOutOfBounds(x - 1, y, gx, gy) * magneticFieldY[y][x - 1])) -
-        ((isOutOfBounds(x, y, gx, gy) * magneticFieldX[y][x]) - (isOutOfBounds(x, y - 1, gx, gy) * magneticFieldX[y - 1][x])))
-}
+export const vert = `
+    precision highp float;
+    attribute vec2 position;
+    varying vec2 uv;
+    void main() {
+        uv = 0.5 * (position + 1.0);
+        gl_Position = vec4(position, 0, 1);
+    }
+`

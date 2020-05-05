@@ -1,192 +1,118 @@
-import { IKernelFunctionThis } from "gpu.js"
+export const renderEnergy = `
+    precision highp float;
 
-export function isOutOfBounds(shapeX: number, shapeY: number, x: number, y: number): number {
-    return x < 0 || x >= shapeX || y < 0 || y >= shapeY ? 1 : 0
-}
+    uniform sampler2D electricField;
+    uniform sampler2D magneticField;
+    uniform float brightness;
 
-export function nativeSmoothStep(x: number) {
-    return (x <= 0 ? 0 : (x >= 1 ? 1 : 3 * x * x - 2 * x * x * x))
-}
+    varying vec2 uv;
 
-export function renderElectricEnergy(this: IKernelFunctionThis,
-    electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-    gx: number, gy: number, cellSize: number) {
-    const x = gx * this.thread.x! / (this.output.x as number)
-    const y = gy * (1 - this.thread.y! / (this.output.y as number))
+    void main() {
+        vec3 el = texture2D(electricField, uv).rgb;
+        vec3 mag = texture2D(magneticField, uv).rgb;
+        float brightnessSquared = brightness * brightness;
 
-    // Make brighter for finer grids. As there are more cells, the energy is spread out instead
-    // of concentrated in less cells so we need to make it brighter.
-    const fieldBrightness = (0.02 * 0.02) / (cellSize * cellSize)
+        vec2 energy = vec2(
+            dot(el, el),
+            dot(mag, mag)
+        );
 
-    const eX = (isOutOfBounds(x, y, gx, gy) * electricFieldX[y][x])
-    const eY = (isOutOfBounds(x, y, gx, gy) * electricFieldY[y][x])
-    const eZ = (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x])
-    const eEnergy = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
-
-    return eEnergy
-}
-
-export function renderMagneticEnergy(this: IKernelFunctionThis,
-    magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-    gx: number, gy: number, cellSize: number) {
-    const x = gx * this.thread.x! / (this.output.x as number)
-    const y = gy * (1 - this.thread.y! / (this.output.y as number))
-
-    // Make brighter for finer grids. As there are more cells, the energy is spread out instead
-    // of concentrated in less cells so we need to make it brighter.
-    const fieldBrightness = (0.02 * 0.02) / (cellSize * cellSize)
-
-    // Magnetic field is offset from electric field, so get value at -0.5 by interpolating 0 and 1
-    const mX = (isOutOfBounds(x - 0.5, y - 0.5, gx, gy) * magneticFieldX[y - 0.5][x - 0.5])
-    const mY = (isOutOfBounds(x - 0.5, y - 0.5, gx, gy) * magneticFieldY[y - 0.5][x - 0.5])
-    const mZ = (isOutOfBounds(x - 0.5, y - 0.5, gx, gy) * magneticFieldZ[y - 0.5][x - 0.5])
-    const mEnergy = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
-
-    return mEnergy
-}
-
-export function bloomExtract(this: IKernelFunctionThis, values: number[][]) {
-    const val = values[this.thread.y!][this.thread.x]
-
-    if (val > 1) {
-        return val
+        //gl_FragColor = vec4(uv.y * 1.0, sin(500.0 * uv.x) * 1.0, 0.0, 0.0);
+        gl_FragColor = vec4(brightnessSquared * energy, 0.0, 0.0);
     }
+`
 
-    return 0
-}
+export const bloomExtract = `
+    precision highp float;
 
-export function blurVertical(this: IKernelFunctionThis, values: number[][]) {
-    const x = this.thread.x
-    const y = this.thread.y!
+    uniform sampler2D texture;
+    uniform float threshold;
 
-    return (
-        0.227027 * values[y][x] +
-        0.1945946 * (values[y + 1][x] + values[y - 1][x]) +
-        0.1216216 * (values[y + 2][x] + values[y - 2][x]) +
-        0.054054 * (values[y + 3][x] + values[y - 3][x]) +
-        0.016216 * (values[y + 4][x] + values[y - 4][x])
-    )
-}
+    varying vec2 uv;
 
-export function blurHorizontal(this: IKernelFunctionThis, values: number[][]) {
-    const x = this.thread.x
-    const y = this.thread.y!
+    void main() {
+        vec4 col = texture2D(texture, uv);
+        gl_FragColor = col * step(threshold, 0.5 * (col.r + col.g));
+    }
+`
 
-    return (
-        0.227027 * values[y][x] +
-        0.1945946 * (values[y][x + 1] + values[y][x - 1]) +
-        0.1216216 * (values[y][x + 2] + values[y][x - 2]) +
-        0.054054 * (values[y][x + 3] + values[y][x - 3]) +
-        0.016216 * (values[y][x + 4] + values[y][x - 4])
-    )
-}
+export const blurDirectional = `
+    precision highp float;
 
-export function drawGpu(this: IKernelFunctionThis,
-    electricEnergy: number[][], magneticEnergy: number[][],
-    electricBloom: number[][], magneticBloom: number[][],
-    permittivity: number[][], permeability: number[][], conductivity: number[][],
-    gx: number, gy: number) {
-    const x = gx * this.thread.x! / (this.output.x as number)
-    const y = gy * (1 - this.thread.y! / (this.output.y as number))
+    uniform sampler2D texture;
+    uniform vec2 direction;
 
-    // Material constants are between 1 and 1000, map to [0, 1] using tanh(0.5 * (x-1))
-    const permittivityValue = (2 / (1 + Math.exp(-0.5 * ((isOutOfBounds(x, y, gx, gy) * permittivity[y][x]) - 1))) - 1)
-    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * ((isOutOfBounds(x, y, gx, gy) * permeability[y][x]) - 1))) - 1)
-    const conductivityValue = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x]) / 10
+    varying vec2 uv;
 
-    // Display material as circles. Permittivity and permeability are offset circles from each other.
-    const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
-    const tileFactorY = Math.min(1, 1 / Math.round(2 * gy / this.output.y!))
+    void main() {
+        gl_FragColor =
+            0.227027 * texture2D(texture, uv) +
+            0.1945946 * (texture2D(texture, uv + direction) + texture2D(texture, uv - direction)) +
+            0.1216216 * (texture2D(texture, uv + 2.0 * direction) + texture2D(texture, uv - 2.0 * direction)) +
+            0.054054 * (texture2D(texture, uv + 3.0 * direction) + texture2D(texture, uv - 3.0 * direction)) +
+            0.016216 * (texture2D(texture, uv + 4.0 * direction) + texture2D(texture, uv - 4.0 * direction));
+    }
+`
 
-    const dxPermittivity = ((tileFactorX * x) % 1) - 0.5
-    const dyPermittivity = ((tileFactorY * y) % 1) - 0.5
+export const draw = `
+    precision highp float;
 
-    const circleDistPermittivity = (dxPermittivity * dxPermittivity + dyPermittivity * dyPermittivity) * Math.sqrt(2 * Math.PI)
+    uniform sampler2D energyTexture;
+    uniform sampler2D bloomTexture;
+    uniform sampler2D materialTexture;
+    uniform vec2 gridSize;
 
-    const dxPermeability = ((tileFactorX * x + 0.5) % 1) - 0.5
-    const dyPermeability = ((tileFactorY * y + 0.5) % 1) - 0.5
-    const circleDistPermeability = (dxPermeability * dxPermeability + dyPermeability * dyPermeability) * Math.sqrt(2 * Math.PI)
+    varying vec2 uv;
 
-    const dxConductivity = Math.abs(((tileFactorX * x) % 1) - 0.5)
-    const dyConductivity = Math.abs(((tileFactorY * y) % 1) - 0.5)
+    const float sqrtTwoPi = 2.50662827463;
 
-    // Smoothstep
-    const bgPermittivity = -nativeSmoothStep(circleDistPermittivity)
-    const bgPermeability = -nativeSmoothStep(circleDistPermeability)
-    const backgroundPermittivity = permittivityValue >= 0.1 ? 1 + bgPermittivity : bgPermittivity
-    const backgroundPermeability = permeabilityValue >= 0.1 ? 1 + bgPermeability : bgPermeability
-    const backgroundConductivity = 0.5 * (conductivityValue >= 0 ? conductivityValue * nativeSmoothStep(dxConductivity) : -conductivityValue * nativeSmoothStep(dyConductivity))
+    void main() {
+        vec2 energy = texture2D(energyTexture, uv).rg;
+        vec2 bloom = texture2D(bloomTexture, uv).rg;
+        vec3 material = texture2D(materialTexture, uv).rgb;
 
-    const eEnergy = electricEnergy[this.thread.y!][this.thread.x]
-    const mEnergy = magneticEnergy[this.thread.y!][this.thread.x]
-    const eBloom = electricBloom[this.thread.y!][this.thread.x]
-    const mBloom = magneticBloom[this.thread.y!][this.thread.x]
+        vec2 pValues = 2.0 / (1.0 + exp(-0.5 * (material.rg - 1.0))) - 1.0;
+        float cValue = material.b / 10.0;
 
-    this.color(
-        Math.min(1, backgroundConductivity + eEnergy + eBloom + 0.8 * backgroundPermittivity * permittivityValue),
-        Math.min(1, backgroundConductivity + eBloom + mBloom),
-        Math.min(1, backgroundConductivity + mEnergy + mBloom + 0.8 * backgroundPermeability * permeabilityValue)
-    )
-}
+        vec2 tileFactor = gridSize;
 
-// On CPU we can't use float indices so round the coordinates
-export function drawCpu(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], electricFieldZ: number[][],
-    magneticFieldX: number[][], magneticFieldY: number[][], magneticFieldZ: number[][],
-    permittivity: number[][], permeability: number[][], conductivity: number[][], gridSize: number[], cellSize: number) {
-    const gx = gridSize[0]
-    const gy = gridSize[1]
+        // Repeat -0.5..+0.5 sawtooth for as many cells as we have
+        vec2 dPermittivity = mod(tileFactor * uv, 1.0) - 0.5;
+        vec2 dPermeability = mod(tileFactor * uv + 0.5, 1.0) - 0.5;
+        vec2 dConductivity = abs(mod(tileFactor * uv, 1.0) - 0.5);
 
-    const fx = gx * this.thread.x! / (this.output.x as number)
-    const fy = gy * (1 - this.thread.y! / (this.output.y as number))
-    const x = Math.round(fx)
-    const y = Math.round(fy)
+        // Calculate distance to repeating center for each pixel.
+        // Values will be in [0, 2 * PI]
+        vec2 pCircleDists = sqrtTwoPi * vec2(
+            dot(dPermittivity, dPermittivity),
+            dot(dPermeability, dPermeability)
+        );
 
-    // Make brighter for finer grids. As there are more cells, the energy is spread out instead
-    // of concentrated in less cells so we need to make it brighter.
-    const fieldBrightness = (0.02 * 0.02) / (cellSize * cellSize)
+        float bgPermittivity = -smoothstep(0.0, 1.0, pCircleDists.x);
+        float bgPermeability = -smoothstep(0.0, 1.0, pCircleDists.y);
 
-    const eX = (isOutOfBounds(x, y, gx, gy) * electricFieldX[y][x])
-    const eY = (isOutOfBounds(x, y, gx, gy) * electricFieldY[y][x])
-    const eZ = (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x])
-    const eEnergy = fieldBrightness * fieldBrightness * (eX * eX + eY * eY + eZ * eZ)
+        bgPermittivity = pValues.x >= 0.1 ? 1.0 + bgPermittivity : bgPermittivity;
+        bgPermeability = pValues.y >= 0.1 ? 1.0 + bgPermeability : bgPermeability;
+        float backgroundConductivity = 0.5 * (cValue >= 0.0 ?
+            cValue * smoothstep(0.0, 1.0, dConductivity.x) :
+            -cValue * smoothstep(0.0, 1.0, dConductivity.y)
+        );
 
-    // Magnetic field is offset from electric field, so get value at -0.5 by interpolating 0 and 1
-    const mX = (isOutOfBounds(x, y, gx, gy) * magneticFieldX[y][x])
-    const mY = (isOutOfBounds(x, y, gx, gy) * magneticFieldY[y][x])
-    const mZ = (isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x])
-    const mEnergy = fieldBrightness * fieldBrightness * (mX * mX + mY * mY + mZ * mZ)
+        gl_FragColor = vec4(
+            min(1.0, backgroundConductivity + 0.8 * bgPermittivity * pValues.x + energy.r + bloom.r),
+            min(1.0, backgroundConductivity + bloom.r + bloom.g),
+            min(1.0, backgroundConductivity + 0.8 * bgPermeability * pValues.y + energy.g + bloom.g),
+            1.0
+        );
+    }
+`
 
-    // Material constants are between 1 and 1000, map to [0, 1] using tanh(0.5 * (x-1))
-    const permittivityValue = (2 / (1 + Math.exp(-0.5 * ((isOutOfBounds(x, y, gx, gy) * permittivity[y][x]) - 1))) - 1)
-    const permeabilityValue = (2 / (1 + Math.exp(-0.5 * ((isOutOfBounds(x, y, gx, gy) * permeability[y][x]) - 1))) - 1)
-    const conductivityValue = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x]) / 10
-
-    // Display material as circles. Permittivity and permeability are offset circles from each other.
-    const tileFactorX = Math.min(1, 1 / Math.round(2 * gx / this.output.x))
-    const tileFactorY = Math.min(1, 1 / Math.round(2 * gy / this.output.y!))
-
-    const dxPermittivity = ((tileFactorX * fx) % 1) - 0.5
-    const dyPermittivity = ((tileFactorY * fy) % 1) - 0.5
-
-    const circleDistPermittivity = (dxPermittivity * dxPermittivity + dyPermittivity * dyPermittivity) * Math.sqrt(2 * Math.PI)
-
-    const dxPermeability = ((tileFactorX * fx + 0.5) % 1) - 0.5
-    const dyPermeability = ((tileFactorY * fy + 0.5) % 1) - 0.5
-    const circleDistPermeability = (dxPermeability * dxPermeability + dyPermeability * dyPermeability) * Math.sqrt(2 * Math.PI)
-
-    const dxConductivity = Math.abs(((tileFactorX * fx) % 1) - 0.5)
-    const dyConductivity = Math.abs(((tileFactorY * fy) % 1) - 0.5)
-
-    // Smoothstep
-    const bgPermittivity = -nativeSmoothStep(circleDistPermittivity)
-    const bgPermeability = -nativeSmoothStep(circleDistPermeability)
-    const backgroundPermittivity = permittivityValue >= 0.1 ? 1 + bgPermittivity : bgPermittivity
-    const backgroundPermeability = permeabilityValue >= 0.1 ? 1 + bgPermeability : bgPermeability
-    const backgroundConductivity = 0.5 * (conductivityValue >= 0 ? conductivityValue * nativeSmoothStep(dxConductivity) : -conductivityValue * nativeSmoothStep(dyConductivity))
-
-    this.color(
-        Math.min(1, backgroundConductivity + eEnergy + 0.8 * backgroundPermittivity * permittivityValue),
-        Math.min(1, backgroundConductivity + eEnergy + mEnergy),
-        Math.min(1, backgroundConductivity + mEnergy + 0.8 * backgroundPermeability * permeabilityValue)
-    )
-}
+export const vertDraw = `
+    precision highp float;
+    attribute vec2 position;
+    varying vec2 uv;
+    void main() {
+        uv = 0.5 * (position + 1.0);
+        gl_Position = vec4(position, 0, 1);
+    }
+`

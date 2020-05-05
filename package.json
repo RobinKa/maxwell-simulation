@@ -5,16 +5,16 @@
   "homepage": "https://cemsim.com",
   "dependencies": {
     "@types/jest": "^24.9.1",
-    "@types/node": "^12.12.37",
+    "@types/node": "^12.12.38",
     "@types/pako": "^1.0.1",
     "@types/react": "^16.9.34",
     "@types/react-dom": "^16.9.7",
-    "gpu.js": "git+https://github.com/gpujs/gpu.js.git#5397186a7ae1e901f504f7682be684cc5572d2c5",
     "pako": "^1.0.11",
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
     "react-scripts": "^3.4.1",
     "react-spinners": "^0.6.1",
+    "regl": "^1.4.2",
     "typescript": "^3.8.3"
   },
   "scripts": {

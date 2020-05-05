@@ -1,42 +1,15 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { GPU, GPUMode, GPUInternalMode, KernelFunction, Texture } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
 import { toggleFullScreen, clamp, QualityPreset } from './util'
-import iconFullscreen from "./icons/fullscreen.png"
-import iconGitHub from "./icons/github.png"
-import iconSettings from "./icons/settings.png"
-import iconShare from "./icons/share.png"
-import iconInfo from "./icons/info.png"
-import iconExamples from "./icons/examples.png"
-import iconMaterialBrush from "./icons/materialbrush.png"
-import iconSignalBrush from "./icons/signalbrush.png"
-import iconResetMaterials from "./icons/resetmaterials.png"
-import iconResetFields from "./icons/resetfields.png"
+import * as Icon from "./icons"
 import "./App.css"
 import { SignalSource } from './sources'
 import * as k from './kernels/rendering'
 import { getSharedSimulatorMap, shareSimulatorMap } from './share'
 import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from './serialization'
 import { BounceLoader } from "react-spinners"
-
-function getGpuMode(): GPUMode | GPUInternalMode {
-    return "webgl"
-
-    try {
-        if (GPU.isWebGL2Supported) {
-            return "webgl2"
-        } else if (GPU.isWebGLSupported) {
-            return "webgl"
-        }
-    } catch {
-        // Checking for support seems to fail completely
-        // on some browsers like Brave which try to prevent
-        // giving out bits of tracking information aggressively.
-    }
-
-    return "cpu"
-}
+import REGL, { Regl, Framebuffer2D } from 'regl'
 
 enum SideBarType {
     SignalBrush = "Signal Brush",
@@ -72,14 +45,11 @@ const qualityPresets: { [presetName: string]: QualityPreset } = {
     }
 }
 
-const gpuMode = getGpuMode()
-console.log(`Using GPU mode ${gpuMode}`)
-
-const defaultPreset = gpuMode === "cpu" ? qualityPresets["Low"] : qualityPresets["Medium"]
+const defaultPreset = qualityPresets["Medium"]
 
 const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
-const defaultSignalFrequency = gpuMode === "cpu" ? 1 : 3
+const defaultSignalFrequency = 3
 const defaultPermittivityBrushValue = 5
 const defaultPermeabilityBrushValue = 1
 const defaultConductivityBrushValue = 0
@@ -108,84 +78,202 @@ function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]
         [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
 }
 
-const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
-    const funcs: KernelFunction<any>[] = [k.isOutOfBounds]
-    if (gpuMode === "cpu") {
-        funcs.push(k.nativeSmoothStep)
+const makeRenderSimulatorCanvas = (regl: Regl, canvasSize: [number, number]) => {
+    const filter = regl.hasExtension("OES_texture_half_float_linear") ? "linear" : "nearest"
+
+    const frameBuffers: Framebuffer2D[] = []
+
+    const makeFrameBuffer = () => {
+        // Create half-precision texture at canvas size
+        const fbo = regl.framebuffer({
+            color: regl.texture({
+                width: canvasSize[0],
+                height: canvasSize[1],
+                wrap: "clamp",
+                type: "float16",
+                format: "rgba",
+                min: filter,
+                mag: filter
+            }),
+            depthStencil: false
+        })
+
+        // Keep track of all frame buffers so we can
+        // resize them when the canvas size changes.
+        frameBuffers.push(fbo)
+
+        return fbo
     }
 
-    const renderElectric = gpu.createKernel(k.renderElectricEnergy)
-        .setOutput(canvasSize).setFunctions(funcs)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single").setPipeline(true)
+    const fbos = [makeFrameBuffer(), makeFrameBuffer()]
+    const energyFbo = makeFrameBuffer()
 
-    const renderMagnetic = gpu.createKernel(k.renderElectricEnergy)
-        .setOutput(canvasSize).setFunctions(funcs)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single").setPipeline(true)
+    type RenderEnergyUniforms = {
+        brightness: number
+        electricField: Framebuffer2D
+        magneticField: Framebuffer2D
+    }
 
-    const renderBloomExtractEl = gpu.createKernel(k.bloomExtract)
-        .setOutput(canvasSize)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single").setPipeline(true)
+    type RenderEnergyAttributes = {
+        position: number[][]
+    }
 
-    const renderBloomExtractMag = gpu.createKernel(k.bloomExtract)
-        .setOutput(canvasSize)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single").setPipeline(true)
+    const renderEnergy = regl<RenderEnergyUniforms, RenderEnergyAttributes, RenderEnergyUniforms>({
+        frag: k.renderEnergy,
+        framebuffer: energyFbo,
+        uniforms: {
+            brightness: (_, { brightness }) => brightness,
+            electricField: (_, { electricField }) => electricField,
+            magneticField: (_, { magneticField }) => magneticField,
+        },
 
-    const vertBlur = gpu.createKernel(k.blurVertical)
-        .setOutput(canvasSize).setPipeline(true)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single")
+        attributes: {
+            position: [
+                [1, -1],
+                [1, 1],
+                [-1, -1],
+                [-1, 1]
+            ]
+        },
+        vert: k.vertDraw,
+        count: 4,
+        primitive: "triangle strip",
+        depth: { enable: false }
+    })
 
-    const horBlurEl = gpu.createKernel(k.blurHorizontal)
-        .setOutput(canvasSize).setPipeline(true)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single")
+    type BloomExtractUniforms = {
+        texture: Framebuffer2D
+        threshold: number
+    }
 
-    const horBlurMag = gpu.createKernel(k.blurHorizontal)
-        .setOutput(canvasSize).setPipeline(true)
-        .setDynamicOutput(true).setDynamicArguments(true)
-        .setTactic("precision").setPrecision("single")
+    const bloomExtract = regl<BloomExtractUniforms, {}, BloomExtractUniforms>({
+        frag: k.bloomExtract,
+        framebuffer: fbos[0],
+        uniforms: {
+            texture: () => energyFbo,
+            threshold: (_, { threshold }) => threshold,
+        },
 
-    const draw = gpu.createKernel(k.drawGpu)
-        .setOutput(canvasSize).setGraphical(true)
-        .setFunctions(funcs).setDynamicOutput(true)
-        .setDynamicArguments(true).setTactic("precision")
-        .setPrecision("unsigned")
+        attributes: {
+            position: [
+                [1, -1],
+                [1, 1],
+                [-1, -1],
+                [-1, 1]
+            ]
+        },
+        vert: k.vertDraw,
+        count: 4,
+        primitive: "triangle strip",
+        depth: { enable: false }
+    })
 
-    const kernels = [
-        renderElectric, renderMagnetic,
-        renderBloomExtractEl, renderBloomExtractMag,
-        draw, vertBlur, horBlurEl, horBlurMag
-    ]
+    const blurVert = regl<{ texture: Framebuffer2D, direction: [number, number] }, {}, { texture: Framebuffer2D }>({
+        frag: k.blurDirectional,
+        framebuffer: fbos[1],
+        uniforms: {
+            texture: (_, { texture }) => texture,
+            direction: ctx => [1 / ctx.drawingBufferHeight, 0]
+        },
 
-    const blurCount = 5
+        attributes: {
+            position: [
+                [1, -1],
+                [1, 1],
+                [-1, -1],
+                [-1, 1]
+            ]
+        },
+        vert: k.vertDraw,
+        count: 4,
+        primitive: "triangle strip",
+        depth: { enable: false }
+    })
 
-    function render(eX: Texture, eY: Texture, eZ: Texture, mX: Texture, mY: Texture, mZ: Texture,
-        permittivity: Texture, permeability: Texture, conductivity: Texture,
-        gx: number, gy: number, cellSize: number) {
-        const electricEnergy = renderElectric(eX, eY, eZ, gx, gy, cellSize)
-        const magneticEnergy = renderMagnetic(mX, mY, mZ, gx, gy, cellSize)
-        let electricExBlurred: Texture = renderBloomExtractEl(electricEnergy) as Texture
-        let magneticExBlurred: Texture = renderBloomExtractMag(magneticEnergy) as Texture
+    const blurHor = regl({
+        frag: k.blurDirectional,
+        framebuffer: fbos[0],
+        uniforms: {
+            texture: fbos[1],
+            direction: ctx => [0, 1 / ctx.drawingBufferHeight]
+        },
+
+        attributes: {
+            position: [
+                [1, -1],
+                [1, 1],
+                [-1, -1],
+                [-1, 1]
+            ]
+        },
+        vert: k.vertDraw,
+        count: 4,
+        primitive: "triangle strip",
+        depth: { enable: false }
+    })
+
+    type DrawUniforms = {
+        energyTexture: Framebuffer2D
+        bloomTexture: Framebuffer2D
+        materialTexture: Framebuffer2D
+        gridSize: [number, number]
+    }
+
+    const draw = regl<DrawUniforms, {}, DrawUniforms>({
+        frag: k.draw,
+        uniforms: {
+            energyTexture: (_, { energyTexture }) => energyTexture,
+            bloomTexture: (_, { bloomTexture }) => bloomTexture,
+            materialTexture: (_, { materialTexture }) => materialTexture,
+            gridSize: (_, { gridSize }) => gridSize,
+        },
+
+        attributes: {
+            position: [
+                [1, -1],
+                [1, 1],
+                [-1, -1],
+                [-1, 1]
+            ]
+        },
+        vert: k.vertDraw,
+        count: 4,
+        primitive: "triangle strip",
+        depth: { enable: false }
+    })
+
+    function render(electricField: Framebuffer2D, magneticField: Framebuffer2D,
+        material: Framebuffer2D, cellSize: number, gridSize: [number, number]) {
+        renderEnergy({
+            brightness: 0.02 * 0.02 / (cellSize * cellSize),
+            electricField: electricField,
+            magneticField: magneticField
+        })
+
+        bloomExtract({
+            threshold: 1
+        })
+
+        const blurCount = 5
         for (let i = 0; i < blurCount; i++) {
-            electricExBlurred = vertBlur(electricExBlurred) as Texture
-            electricExBlurred = horBlurEl(electricExBlurred) as Texture
-            magneticExBlurred = vertBlur(magneticExBlurred) as Texture
-            magneticExBlurred = horBlurMag(magneticExBlurred) as Texture
+            blurVert({
+                texture: i === 0 ? energyFbo : fbos[0]
+            })
+            blurHor()
         }
 
-        draw(electricEnergy, magneticEnergy, electricExBlurred, magneticExBlurred, permittivity, permeability, conductivity, gx, gy);
+        draw({
+            energyTexture: energyFbo,
+            bloomTexture: fbos[0],
+            materialTexture: material,
+            gridSize: gridSize
+        })
     }
 
     return {
         render: render,
         adjustSize: (size: [number, number]) => {
-            for (let kernel of kernels) {
-                kernel.setOutput(size)
-            }
+            frameBuffers.forEach(fbo => fbo.resize(size[0], size[1]))
         }
     }
 }
@@ -223,22 +311,27 @@ export default function () {
     const gridSize = useMemo<[number, number]>(() => calculateGridSize(gridSizeLongest, canvasSize), [canvasSize, gridSizeLongest])
 
     // Would use useMemo for gpu here, but useMemo does not seem to work with ref dependencies.
-    const [gpu, setGpu] = useState<GPU | null>(null)
+    const [regl, setRegl] = useState<Regl | null>(null)
     useEffect(() => {
         if (drawCanvasRef.current) {
-            const gpu = new GPU({ mode: gpuMode, canvas: drawCanvasRef.current })
+            const regl = REGL({
+                canvas: drawCanvasRef.current,
+                extensions: [
+                    "OES_texture_half_float",
+                ],
+                optionalExtensions: [
+                    "OES_texture_half_float_linear"
+                ]
+            })
 
-            // Add native func for gpus here. For cpus we add a normal func when creating the kernel.
-            if (gpuMode !== "cpu") {
-                gpu.addNativeFunction(k.nativeSmoothStep.name, `float ${k.nativeSmoothStep.name}(float x) { return smoothstep(0.0, 1.0, x); }`)
-            }
-
-            setGpu(gpu)
+            // Need to pass a lambda here because otherwise
+            // react will treat regl as a callable.
+            setRegl((prev: any) => regl)
         }
     }, [drawCanvasRef])
 
-    const simulator = useMemo(() => gpu ? new FDTDSimulator(gpu, initialGridSize, initialCellSize, initialReflectiveBoundary) : null, [gpu])
-    const renderSim = useMemo(() => gpu ? makeRenderSimulatorCanvas(gpu, initialGridSize) : null, [gpu])
+    const simulator = useMemo(() => regl ? new FDTDSimulator(regl, initialGridSize, initialCellSize, initialReflectiveBoundary, initialDt) : null, [regl])
+    const renderSim = useMemo(() => regl ? makeRenderSimulatorCanvas(regl, initialGridSize) : null, [regl])
 
     // Load share id
     useEffect(() => {
@@ -324,20 +417,20 @@ export default function () {
     const windowToSimulationPoint = useMemo(() => {
         return (windowPoint: [number, number]) => {
             const simulationPoint: [number, number] = [
-                clamp(0, gridSize[0] - 1, Math.floor(gridSize[0] * windowPoint[0] / windowSize[0])),
-                clamp(0, gridSize[1] - 1, Math.floor(gridSize[1] * windowPoint[1] / windowSize[1]))
+                clamp(0, 1, windowPoint[0] / windowSize[0]),
+                clamp(0, 1, 1 - windowPoint[1] / windowSize[1])
             ]
             return simulationPoint
         }
-    }, [windowSize, gridSize])
+    }, [windowSize])
 
     const simStep = useCallback(() => {
         if (simulator) {
             const simData = simulator.getData()
 
             if (mouseDownPos.current !== null) {
-                const center = windowToSimulationPoint(mouseDownPos.current)
-                const brushHalfSize = Math.round(signalBrushSize / 2)
+                const center: [number, number] = windowToSimulationPoint(mouseDownPos.current)
+                const brushHalfSize = signalBrushSize / gridSize[1] / 2
                 const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time)
 
                 const drawInfo = drawShapeType === "square" ?
@@ -354,7 +447,7 @@ export default function () {
             simulator.stepMagnetic(dt)
             simulator.stepElectric(dt)
         }
-    }, [simulator, dt, signalFrequency, signalBrushValue, signalBrushSize, sources, windowToSimulationPoint, drawShapeType])
+    }, [simulator, dt, signalFrequency, signalBrushValue, signalBrushSize, sources, windowToSimulationPoint, drawShapeType, gridSize])
 
     useEffect(() => {
         if (simulationSpeed > 0) {
@@ -383,11 +476,10 @@ export default function () {
 
             const simData = simulator.getData()
 
-            renderSim.render(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
-                simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
-                simData.permittivity.values, simData.permeability.values, simData.conductivity.values, gridSize[0], gridSize[1], cellSize)
+            renderSim.render(simData.electricField.current, simData.magneticField.current,
+                simData.material.current, cellSize, gridSize)
         }
-    }, [simulator, renderSim, gridSize, cellSize, resolutionScale, drawCanvasRef])
+    }, [simulator, renderSim, cellSize, gridSize, resolutionScale, drawCanvasRef])
 
     useEffect(() => {
         let stop = false
@@ -405,11 +497,8 @@ export default function () {
 
     const changeMaterial = useCallback((canvasPos: [number, number]) => {
         if (simulator) {
-            const center: [number, number] = [
-                Math.round(gridSize[0] * (canvasPos[0] / windowSize[0])),
-                Math.round(gridSize[1] * (canvasPos[1] / windowSize[1]))
-            ]
-            const brushHalfSize = Math.round(materialBrushSize / 2)
+            const center: [number, number] = windowToSimulationPoint(canvasPos)
+            const brushHalfSize = materialBrushSize / gridSize[1] / 2
 
             simulator.drawMaterial("permittivity", drawShapeType === "square" ?
                 makeDrawSquareInfo(center, brushHalfSize, permittivityBrushValue) :
@@ -423,7 +512,7 @@ export default function () {
                 makeDrawSquareInfo(center, brushHalfSize, conductivityBrushValue) :
                 makeDrawCircleInfo(center, brushHalfSize, conductivityBrushValue))
         }
-    }, [simulator, gridSize, windowSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType])
+    }, [simulator, gridSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType, windowToSimulationPoint])
 
     const resetMaterials = useCallback(() => {
         if (simulator) {
@@ -512,7 +601,8 @@ export default function () {
 
     const getMaterialMap = useMemo<() => (MaterialMap | null)>(() => {
         return () => {
-            if (simulator) {
+            // TODO
+            /*if (simulator) {
                 const simData = simulator.getData()
                 return {
                     permittivity: simData.permittivity.values.toArray() as number[][],
@@ -520,7 +610,7 @@ export default function () {
                     conductivity: simData.conductivity.values.toArray() as number[][],
                     shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
                 }
-            }
+            }*/
 
             return null
         }
@@ -571,9 +661,9 @@ export default function () {
                 />
 
                 <div style={{ position: "absolute", bottom: 10, right: 10, ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={_ => { generateShareUrl(); setShareVisible(!shareVisible) }} src={iconShare} highlight={shareVisible} />
-                    <ImageButton onClick={_ => setInfoVisible(!infoVisible)} src={iconInfo} />
-                    <a href="https://github.com/RobinKa/maxwell-simulation"><ImageButton src={iconGitHub} /></a>
+                    <ImageButton onClick={_ => { generateShareUrl(); setShareVisible(!shareVisible) }} src={Icon.Share} highlight={shareVisible} />
+                    <ImageButton onClick={_ => setInfoVisible(!infoVisible)} src={Icon.Info} />
+                    <a href="https://github.com/RobinKa/maxwell-simulation"><ImageButton src={Icon.GitHub} /></a>
                 </div>
 
                 {mousePosition && (drawShapeType === "square" ?
@@ -581,24 +671,20 @@ export default function () {
                     <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid rgb(255, 89, 0)", borderRadius: "50%" }} />)
                 }
 
-                {gpuMode === "cpu" &&
-                    <div style={{ position: "absolute", pointerEvents: "none", left: 10, bottom: 10, color: "red", fontWeight: "lighter" }}>Using CPU (WebGL with float textures unsupported by your device)</div>
-                }
-
                 <div style={{ position: "absolute", top: "10px", left: "10px", ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={_ => { setSideBar(SideBarType.SignalBrush); setClickOption(optionSignal) }} src={iconSignalBrush} highlight={sideBar === SideBarType.SignalBrush} />
-                    <ImageButton onClick={_ => { setSideBar(SideBarType.MaterialBrush); setClickOption(optionMaterialBrush) }} src={iconMaterialBrush} highlight={sideBar === SideBarType.MaterialBrush} />
+                    <ImageButton onClick={_ => { setSideBar(SideBarType.SignalBrush); setClickOption(optionSignal) }} src={Icon.SignalBrush} highlight={sideBar === SideBarType.SignalBrush} />
+                    <ImageButton onClick={_ => { setSideBar(SideBarType.MaterialBrush); setClickOption(optionMaterialBrush) }} src={Icon.MaterialBrush} highlight={sideBar === SideBarType.MaterialBrush} />
                 </div>
 
                 <div style={{ position: "absolute", top: "10px", right: "10px", ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={_ => setSideBar(SideBarType.Examples)} src={iconExamples} highlight={sideBar === SideBarType.Examples} />
-                    <ImageButton onClick={_ => setSideBar(SideBarType.Settings)} src={iconSettings} highlight={sideBar === SideBarType.Settings} />
-                    <ImageButton onClick={toggleFullScreen} src={iconFullscreen} />
+                    <ImageButton onClick={_ => setSideBar(SideBarType.Examples)} src={Icon.Examples} highlight={sideBar === SideBarType.Examples} />
+                    <ImageButton onClick={_ => setSideBar(SideBarType.Settings)} src={Icon.Settings} highlight={sideBar === SideBarType.Settings} />
+                    <ImageButton onClick={toggleFullScreen} src={Icon.Fullscreen} />
                 </div>
 
                 <div style={{ position: "absolute", bottom: "10px", left: "10px", ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={resetFields} src={iconResetFields} />
-                    <ImageButton onClick={resetMaterials} src={iconResetMaterials} />
+                    <ImageButton onClick={resetFields} src={Icon.ResetFields} />
+                    <ImageButton onClick={resetMaterials} src={Icon.ResetMaterials} />
                 </div>
 
                 <CollapsibleContainer collapsed={sideMenuCollapsed} setCollapsed={setSideMenuCollapsed} title={sideBar.toString()}

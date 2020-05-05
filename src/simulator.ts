@@ -1,4 +1,4 @@
-import { GPU, IKernelRunShortcut, Texture, KernelFunction } from "gpu.js"
+import { Regl, Framebuffer2D, DrawCommand } from "regl"
 import * as k from "./kernels/simulation"
 
 export type MaterialType = "permittivity" | "permeability" | "conductivity"
@@ -41,34 +41,29 @@ export function makeDrawCircleInfo(center: [number, number], radius: number, val
 
 export type DrawInfo = DrawSquareInfo | DrawCircleInfo
 
-export type ScalarField2D = {
-    values: Texture
-    shape: [number, number]
+class DoubleFramebuffer2D {
+    current: Framebuffer2D
+    previous: Framebuffer2D
+
+    constructor(current: Framebuffer2D, previous: Framebuffer2D) {
+        this.current = current
+        this.previous = previous
+    }
+
+    swap() {
+        const oldCurrent = this.current
+        this.current = this.previous
+        this.previous = oldCurrent
+    }
 }
 
 export type SimulationData = {
     time: number
-    electricField: [ScalarField2D, ScalarField2D, ScalarField2D]
-    magneticField: [ScalarField2D, ScalarField2D, ScalarField2D]
-
-    permittivity: ScalarField2D
-    permeability: ScalarField2D
-    conductivity: ScalarField2D
-
-    electricSourceFieldZ: ScalarField2D
-}
-
-function getFieldByMaterialType(simulationData: SimulationData, materialType: MaterialType) {
-    switch (materialType) {
-        case "permittivity":
-            return simulationData.permittivity
-        case "permeability":
-            return simulationData.permeability
-        case "conductivity":
-            return simulationData.conductivity
-    }
-
-    throw new Error("Unhandled material type: " + materialType)
+    electricField: DoubleFramebuffer2D
+    magneticField: DoubleFramebuffer2D
+    material: DoubleFramebuffer2D
+    alphaBetaField: DoubleFramebuffer2D
+    electricSourceField: DoubleFramebuffer2D
 }
 
 export interface Simulator {
@@ -80,102 +75,175 @@ export interface Simulator {
     getData: () => SimulationData
 }
 
-function memoByName<T>(makeNew: () => T) {
-    const memoized: { [name: string]: T } = {}
-
-    return (name: string) => {
-        if (!memoized[name]) {
-            memoized[name] = makeNew()
-        }
-        return memoized[name]
-    }
-}
-
 export class FDTDSimulator implements Simulator {
     private data: SimulationData
 
-    private updateMagnetic: [IKernelRunShortcut, IKernelRunShortcut, IKernelRunShortcut]
-    private updateElectric: [IKernelRunShortcut, IKernelRunShortcut, IKernelRunShortcut]
+    private updateMagnetic: DrawCommand
+    private updateElectric: DrawCommand
+    private updateAlphaBeta: DrawCommand
 
-    private injectSource: IKernelRunShortcut
-    private decaySource: IKernelRunShortcut
+    private injectSource: DrawCommand
+    private decaySource: DrawCommand
 
-    private makeFieldTexture: (name: string) => IKernelRunShortcut
-    private copyTexture: (name: string) => IKernelRunShortcut
-    private copyTextureWithBounds: (name: string) => IKernelRunShortcut
-    private copyTextureWithBoundsFromEncoded: (name: string) => IKernelRunShortcut
+    private drawOnTexture: { [shape: string]: DrawCommand }
 
-    private drawOnTexture: { [shape: string]: (name: string) => IKernelRunShortcut }
+    private frameBuffers: Framebuffer2D[]
+    private alphaBetaDt: number // dt that the alpha beta values were calculated for
 
-    private kernels: IKernelRunShortcut[] = []
+    constructor(readonly regl: Regl, private gridSize: [number, number], private cellSize: number, public reflectiveBoundary: boolean, private dt: number) {
+        this.alphaBetaDt = dt
 
-    constructor(readonly gpu: GPU, private gridSize: [number, number], private cellSize: number, public reflectiveBoundary: boolean) {
-        const makeKernel = (kernel: KernelFunction<any>) => {
-            const runKernel = this.gpu.createKernel(kernel).setOutput(this.gridSize)
-                .setPipeline(true).setDynamicOutput(true).setDynamicArguments(true)
-                .setTactic("precision").setPrecision("single")
-            this.kernels.push(runKernel)
-            return runKernel
+        this.frameBuffers = []
+
+        const makeFrameBuffer = () => {
+            // Create half-precision texture at grid size
+            const fbo = regl.framebuffer({
+                color: regl.texture({
+                    width: gridSize[0],
+                    height: gridSize[1],
+                    wrap: "clamp",
+                    type: "float16",
+                    format: "rgba",
+                    min: "nearest",
+                    mag: "nearest",
+                }),
+                depthStencil: false
+            })
+
+            // Keep track of all fbos so we can resize them
+            // together if the grid size changes.
+            this.frameBuffers.push(fbo)
+
+            return fbo
         }
-        const makeKernelWithFuncs = (kernel: KernelFunction<any>) => makeKernel(kernel).setFunctions([k.isOutOfBounds])
-        const makeKernelWithFuncsAndConsts = (kernel: KernelFunction<any>) => makeKernelWithFuncs(kernel).setConstants({ cellSize: cellSize })
 
-        this.makeFieldTexture = memoByName(() => makeKernel(k.makeFieldTexture))
-        this.copyTexture = memoByName(() => makeKernel(k.copyTexture))
-        this.copyTextureWithBounds = memoByName(() => makeKernel(k.copyTextureWithBounds))
-        this.copyTextureWithBoundsFromEncoded = memoByName(() => makeKernel(k.copyTextureWithBoundsFromEncoded))
-        const makeField = (name: string, initialValue: number): ScalarField2D => { return { values: this.makeFieldTexture(name)(initialValue) as Texture, shape: this.gridSize } }
+        const makeField = () => {
+            return new DoubleFramebuffer2D(
+                makeFrameBuffer(),
+                makeFrameBuffer()
+            )
+        }
 
         this.data = {
             time: 0,
-            electricField: [0, 1, 2].map(i => makeField(`e${i}`, 0)) as [ScalarField2D, ScalarField2D, ScalarField2D],
-            magneticField: [0, 1, 2].map(i => makeField(`m${i}`, 0)) as [ScalarField2D, ScalarField2D, ScalarField2D],
-            electricSourceFieldZ: makeField("es2", 0),
-            permittivity: makeField("permittivity", 1),
-            permeability: makeField("permeability", 1),
-            conductivity: makeField("conductivity", 0)
+            electricField: makeField(),
+            magneticField: makeField(),
+            electricSourceField: makeField(),
+            material: makeField(),
+            alphaBetaField: makeField()
         }
+
+        const makeFragFn = <T>(frag: string, fbos: DoubleFramebuffer2D, uniforms: T) => {
+            return regl({
+                frag: frag,
+                framebuffer: () => fbos.current,
+                uniforms: uniforms,
+
+                attributes: {
+                    position: [
+                        [1, -1],
+                        [1, 1],
+                        [-1, -1],
+                        [-1, 1]
+                    ]
+                },
+                vert: k.vert,
+                count: 4,
+                primitive: "triangle strip",
+                depth: { enable: false }
+            })
+        }
+
+        const makeFragWithFboPropFn = (frag: string, uniforms: any) => {
+            return regl({
+                frag: frag,
+                framebuffer: (_: any, prop: any) => prop.fbo,
+                uniforms: uniforms,
+
+                attributes: {
+                    position: [
+                        [1, -1],
+                        [1, 1],
+                        [-1, -1],
+                        [-1, 1]
+                    ]
+                },
+                vert: k.vert,
+                count: 4,
+                primitive: "triangle strip",
+                depth: { enable: false }
+            })
+        }
+
+        this.updateAlphaBeta = makeFragFn(k.updateAlphaBeta, this.data.alphaBetaField, {
+            dt: (_: any, props: any) => props.dt,
+            cellSize: (_: any, props: any) => props.cellSize,
+            material: (_: any, props: any) => props.material,
+        })
+
+        this.updateElectric = makeFragFn(k.updateElectric, this.data.electricField, {
+            electricField: (_: any, props: any) => props.electricField,
+            magneticField: (_: any, props: any) => props.magneticField,
+            alphaBetaField: (_: any, props: any) => props.alphaBetaField,
+            relativeCellSize: (_: any, props: any) => props.relativeCellSize,
+            reflectiveBoundary: (_: any, props: any) => props.reflectiveBoundary,
+        })
+
+        this.updateMagnetic = makeFragFn(k.updateMagnetic, this.data.magneticField, {
+            electricField: (_: any, props: any) => props.electricField,
+            magneticField: (_: any, props: any) => props.magneticField,
+            alphaBetaField: (_: any, props: any) => props.alphaBetaField,
+            relativeCellSize: (_: any, props: any) => props.relativeCellSize,
+            reflectiveBoundary: (_: any, props: any) => props.reflectiveBoundary,
+        })
+
+        this.injectSource = makeFragFn(k.injectSource, this.data.electricField, {
+            sourceField: (_: any, props: any) => props.sourceField,
+            field: (_: any, props: any) => props.field,
+            dt: (_: any, props: any) => props.dt,
+        })
+
+        this.decaySource = makeFragFn(k.decaySource, this.data.electricSourceField, {
+            sourceField: (_: any, props: any) => props.sourceField,
+            dt: (_: any, props: any) => props.dt,
+        })
 
         this.drawOnTexture = {
-            "square": memoByName(() => makeKernelWithFuncsAndConsts(k.drawSquare)),
-            "circle": memoByName(() => makeKernelWithFuncsAndConsts(k.drawCircle))
+            "circle": makeFragWithFboPropFn(k.drawCircle, {
+                texture: (_: any, props: any) => props.texture,
+                pos: (_: any, props: any) => props.pos,
+                value: (_: any, props: any) => props.value,
+                radius: (_: any, props: any) => props.radius,
+                keep: (_: any, props: any) => props.keep,
+            }),
+            "square": makeFragWithFboPropFn(k.drawSquare, {
+                texture: (_: any, props: any) => props.texture,
+                pos: (_: any, props: any) => props.pos,
+                value: (_: any, props: any) => props.value,
+                size: (_: any, props: any) => props.size,
+                keep: (_: any, props: any) => props.keep,
+            }),
         }
 
-        this.injectSource = makeKernelWithFuncs(k.injectSource)
-        this.decaySource = makeKernelWithFuncs(k.decaySource)
+        this.resetFields()
+        this.resetMaterials()
+    }
 
-        this.updateMagnetic = [
-            makeKernelWithFuncsAndConsts(k.updateMagneticX),
-            makeKernelWithFuncsAndConsts(k.updateMagneticY),
-            makeKernelWithFuncsAndConsts(k.updateMagneticZ)
-        ]
-
-        this.updateElectric = [
-            makeKernelWithFuncsAndConsts(k.updateElectricX),
-            makeKernelWithFuncsAndConsts(k.updateElectricY),
-            makeKernelWithFuncsAndConsts(k.updateElectricZ)
-        ]
+    updateAlphaBetaFromMaterial(dt: number) {
+        this.alphaBetaDt = dt
+        this.updateAlphaBeta({
+            material: this.data.material.current,
+            dt: dt,
+            cellSize: this.cellSize
+        })
     }
 
     setGridSize = (gridSize: [number, number]) => {
         this.gridSize = gridSize
 
-        this.kernels.forEach(kernel => kernel.setOutput(gridSize))
+        this.frameBuffers.forEach(frameBuffer => frameBuffer.resize(gridSize[0], gridSize[1]))
 
-        for (let dim = 0; dim < 3; dim++) {
-            this.data.electricField[dim].shape = gridSize
-            this.data.magneticField[dim].shape = gridSize
-        }
-
-        const oldShape = this.data.permittivity.shape
-
-        this.data.permittivity.shape = gridSize
-        this.data.permeability.shape = gridSize
-        this.data.conductivity.shape = gridSize
-
-        this.data.permittivity.values = this.copyTextureWithBounds("permittivity")(this.data.permittivity.values, oldShape[0], oldShape[1], 1) as Texture
-        this.data.permeability.values = this.copyTextureWithBounds("permeability")(this.data.permeability.values, oldShape[0], oldShape[1], 1) as Texture
-        this.data.conductivity.values = this.copyTextureWithBounds("conductivity")(this.data.conductivity.values, oldShape[0], oldShape[1], 0) as Texture
+        // TODO: Copy old data ?
 
         this.resetFields()
     }
@@ -187,32 +255,54 @@ export class FDTDSimulator implements Simulator {
     }
 
     stepElectric = (dt: number) => {
-        const el = this.data.electricField.map(f => f.values)
-        const mag = this.data.magneticField.map(f => f.values)
-        const perm = this.data.permittivity.values
-        const cond = this.data.conductivity.values
+        if (this.alphaBetaDt !== dt) {
+            this.updateAlphaBetaFromMaterial(dt)
+        }
 
-        const injectedElZ = this.injectSource(this.data.electricSourceFieldZ.values, el[2], dt) as Texture
-        this.data.electricSourceFieldZ.values = this.decaySource(this.copyTexture("es2")(this.data.electricSourceFieldZ.values), dt) as Texture
+        this.data.electricField.swap()
+        this.data.electricSourceField.swap()
 
-        // d/dt E(x, t) = curl B(x, t) / ε
-        this.data.electricField[0].values = this.updateElectric[0](mag[2], perm, cond, this.copyTexture("e0")(el[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.electricField[1].values = this.updateElectric[1](mag[2], perm, cond, this.copyTexture("e1")(el[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.electricField[2].values = this.updateElectric[2](mag[0], mag[1], perm, cond, injectedElZ, dt, this.cellSize, this.reflectiveBoundary) as Texture
+        // Writes to E current
+        this.injectSource({
+            sourceField: this.data.electricSourceField.previous,
+            field: this.data.electricField.previous,
+            dt: dt
+        })
+
+        this.data.electricField.swap()
+
+        // Writes to S current
+        this.decaySource({
+            sourceField: this.data.electricSourceField.previous,
+            dt: dt
+        })
+
+        // Writes to E current
+        this.updateElectric({
+            electricField: this.data.electricField.previous,
+            magneticField: this.data.magneticField.current,
+            alphaBetaField: this.data.alphaBetaField.current,
+            relativeCellSize: [1 / this.gridSize[0], 1 / this.gridSize[1]],
+            reflectiveBoundary: this.reflectiveBoundary,
+        })
 
         this.data.time += dt / 2
     }
 
     stepMagnetic = (dt: number) => {
-        const el = this.data.electricField.map(f => f.values)
-        const mag = this.data.magneticField.map(f => f.values)
-        const perm = this.data.permeability.values
-        const cond = this.data.conductivity.values
+        if (this.alphaBetaDt !== dt) {
+            this.updateAlphaBetaFromMaterial(dt)
+        }
+        
+        this.data.magneticField.swap()
 
-        // d/dt B(x, t) = -curl E(x, t) / µ
-        this.data.magneticField[0].values = this.updateMagnetic[0](el[2], perm, cond, this.copyTexture("m0")(mag[0]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.magneticField[1].values = this.updateMagnetic[1](el[2], perm, cond, this.copyTexture("m1")(mag[1]), dt, this.cellSize, this.reflectiveBoundary) as Texture
-        this.data.magneticField[2].values = this.updateMagnetic[2](el[0], el[1], perm, cond, this.copyTexture("m2")(mag[2]), dt, this.cellSize, this.reflectiveBoundary) as Texture
+        this.updateMagnetic({
+            electricField: this.data.electricField.current,
+            magneticField: this.data.magneticField.previous,
+            alphaBetaField: this.data.alphaBetaField.current,
+            relativeCellSize: [1 / this.gridSize[0], 1 / this.gridSize[1]],
+            reflectiveBoundary: this.reflectiveBoundary,
+        })
 
         this.data.time += dt / 2
     }
@@ -220,80 +310,97 @@ export class FDTDSimulator implements Simulator {
     resetFields = () => {
         this.data.time = 0
 
-        for (let dim = 0; dim < 3; dim++) {
-            this.data.electricField[dim].values = this.makeFieldTexture(`e${dim}`)(0) as Texture
-            this.data.magneticField[dim].values = this.makeFieldTexture(`m${dim}`)(0) as Texture
-        }
+        this.regl.clear({
+            color: [0, 0, 0, 0],
+            framebuffer: this.data.electricField.current
+        })
 
-        this.data.electricSourceFieldZ.values = this.makeFieldTexture("es2")(0) as Texture
+        this.regl.clear({
+            color: [0, 0, 0, 0],
+            framebuffer: this.data.magneticField.current
+        })
+
+        this.regl.clear({
+            color: [0, 0, 0, 0],
+            framebuffer: this.data.electricSourceField.current
+        })
     }
 
     resetMaterials = () => {
-        this.data.permeability.values = this.makeFieldTexture("permeability")(1) as Texture
-        this.data.permittivity.values = this.makeFieldTexture("permittivity")(1) as Texture
-        this.data.conductivity.values = this.makeFieldTexture("conductivity")(0) as Texture
-    }
+        this.regl.clear({
+            color: [1, 1, 0, 0],
+            framebuffer: this.data.material.current
+        })
 
-    private drawShape = (field: ScalarField2D, fieldName: string, drawInfo: DrawInfo, keep: number) => {
-        const drawFunc = this.drawOnTexture[drawInfo.drawShape](fieldName)
-        const copiedValues = this.copyTexture(fieldName)(field.values)
-
-        switch (drawInfo.drawShape) {
-            case "square":
-                field.values = drawFunc(drawInfo.center[0], drawInfo.center[1], drawInfo.halfSize, drawInfo.value, keep, copiedValues) as Texture
-                break
-            case "circle":
-                field.values = drawFunc(drawInfo.center[0], drawInfo.center[1], drawInfo.radius, drawInfo.value, keep, copiedValues) as Texture
-                break
-            default:
-                throw Error(`Invalid draw shape: ${JSON.stringify(drawInfo)}`)
-        }
+        this.updateAlphaBetaFromMaterial(this.alphaBetaDt)
     }
 
     drawMaterial = (materialType: MaterialType, drawInfo: DrawInfo) => {
-        const materialField = getFieldByMaterialType(this.data, materialType)
-        this.drawShape(materialField, materialType, drawInfo, 0)
+        this.data.material.swap()
+
+        const value = [0, 0, 0, 0]
+        const keep = [1, 1, 1, 1]
+        if (materialType === "permittivity") {
+            value[0] = drawInfo.value
+            keep[0] = 0
+        } else if (materialType === "permeability") {
+            value[1] = drawInfo.value
+            keep[1] = 0
+        } else if (materialType === "conductivity") {
+            value[2] = drawInfo.value
+            keep[2] = 0
+        }
+
+        const uniforms: any = {
+            pos: drawInfo.center,
+            value: value,
+            keep: keep,
+            texture: this.data.material.previous,
+            fbo: this.data.material.current
+        }
+
+        if (drawInfo.drawShape === "circle") {
+            uniforms.radius = drawInfo.radius
+        } else if (drawInfo.drawShape === "square") {
+            uniforms.size = drawInfo.halfSize
+        }
+
+        this.drawOnTexture[drawInfo.drawShape](uniforms)
+
+        this.updateAlphaBetaFromMaterial(this.alphaBetaDt)
     }
 
     injectSignal = (drawInfo: DrawInfo, dt: number) => {
-        this.drawShape(this.data.electricSourceFieldZ, "es2", { ...drawInfo, value: drawInfo.value * dt }, 1)
+        this.data.electricSourceField.swap()
+
+        const uniforms: any = {
+            pos: drawInfo.center,
+            value: [0, 0, drawInfo.value * dt, 0],
+            keep: [1, 1, 1, 1],
+            texture: this.data.electricSourceField.previous,
+            fbo: this.data.electricSourceField.current
+        }
+
+        if (drawInfo.drawShape === "circle") {
+            uniforms.radius = drawInfo.radius
+        } else if (drawInfo.drawShape === "square") {
+            uniforms.size = drawInfo.halfSize
+        }
+
+        this.drawOnTexture[drawInfo.drawShape](uniforms)
     }
 
     loadPermittivity = (permittivity: number[][]) => {
-        const u = encodeScalarField(permittivity)
-        this.data.permittivity.values = this.copyTextureWithBoundsFromEncoded("loadPermittivity")(u, permittivity[0].length, permittivity.length, 1) as Texture
+        // TODO
     }
 
     loadPermeability = (permeability: number[][]) => {
-        const u = encodeScalarField(permeability)
-        this.data.permeability.values = this.copyTextureWithBoundsFromEncoded("loadPermeability")(u, permeability[0].length, permeability.length, 1) as Texture
+        // TODO
     }
 
     loadConductivity = (conductivity: number[][]) => {
-        const u = encodeScalarField(conductivity)
-        this.data.conductivity.values = this.copyTextureWithBoundsFromEncoded("loadConductivity")(u, conductivity[0].length, conductivity.length, 0) as Texture
+        // TODO
     }
 
     getData = () => this.data
-}
-
-function encodeScalarField(field: number[][]) {
-    const gx = field.length
-    const gy = field[0].length
-
-    const view = new DataView(new ArrayBuffer(4))
-
-    const u = new Uint8Array(gx * gy * 4)
-    for (let i = 0; i < gx; i++) {
-        for (let j = 0; j < gy; j++) {
-            view.setFloat32(0, field[i][j])
-            const encoded = view.getUint32(0)
-            u[i * gy * 4 + j * 4 + 0] = (encoded & 0xFF000000) >>> 24
-            u[i * gy * 4 + j * 4 + 1] = (encoded & 0x00FF0000) >>> 16
-            u[i * gy * 4 + j * 4 + 2] = (encoded & 0x0000FF00) >>> 8
-            u[i * gy * 4 + j * 4 + 3] = (encoded & 0x000000FF)
-        }
-    }
-
-    return u
 }
