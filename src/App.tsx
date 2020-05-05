@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { GPU, GPUMode, GPUInternalMode, KernelFunction } from "gpu.js"
+import { GPU, GPUMode, GPUInternalMode, KernelFunction, Texture } from "gpu.js"
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
 import { toggleFullScreen, clamp, QualityPreset } from './util'
@@ -21,12 +21,18 @@ import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from 
 import { BounceLoader } from "react-spinners"
 
 function getGpuMode(): GPUMode | GPUInternalMode {
-    if (GPU.isSinglePrecisionSupported) {
+    return "webgl"
+
+    try {
         if (GPU.isWebGL2Supported) {
             return "webgl2"
         } else if (GPU.isWebGLSupported) {
             return "webgl"
         }
+    } catch {
+        // Checking for support seems to fail completely
+        // on some browsers like Brave which try to prevent
+        // giving out bits of tracking information aggressively.
     }
 
     return "cpu"
@@ -103,13 +109,85 @@ function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]
 }
 
 const makeRenderSimulatorCanvas = (gpu: GPU, canvasSize: [number, number]) => {
-    const funcs: KernelFunction[] = [k.getAt]
+    const funcs: KernelFunction<any>[] = [k.isOutOfBounds]
     if (gpuMode === "cpu") {
         funcs.push(k.nativeSmoothStep)
     }
 
-    const kernel = gpuMode !== "cpu" ? gpu.createKernel(k.drawGpu) : gpu.createKernel(k.drawCpu)
-    return kernel.setOutput(canvasSize).setGraphical(true).setFunctions(funcs).setWarnVarUsage(false).setPrecision("unsigned").setDynamicOutput(true).setDynamicArguments(true)
+    const renderElectric = gpu.createKernel(k.renderElectricEnergy)
+        .setOutput(canvasSize).setFunctions(funcs)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single").setPipeline(true)
+
+    const renderMagnetic = gpu.createKernel(k.renderElectricEnergy)
+        .setOutput(canvasSize).setFunctions(funcs)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single").setPipeline(true)
+
+    const renderBloomExtractEl = gpu.createKernel(k.bloomExtract)
+        .setOutput(canvasSize)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single").setPipeline(true)
+
+    const renderBloomExtractMag = gpu.createKernel(k.bloomExtract)
+        .setOutput(canvasSize)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single").setPipeline(true)
+
+    const vertBlur = gpu.createKernel(k.blurVertical)
+        .setOutput(canvasSize).setPipeline(true)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single")
+
+    const horBlurEl = gpu.createKernel(k.blurHorizontal)
+        .setOutput(canvasSize).setPipeline(true)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single")
+
+    const horBlurMag = gpu.createKernel(k.blurHorizontal)
+        .setOutput(canvasSize).setPipeline(true)
+        .setDynamicOutput(true).setDynamicArguments(true)
+        .setTactic("precision").setPrecision("single")
+
+    const draw = gpu.createKernel(k.drawGpu)
+        .setOutput(canvasSize).setGraphical(true)
+        .setFunctions(funcs).setDynamicOutput(true)
+        .setDynamicArguments(true).setTactic("precision")
+        .setPrecision("unsigned")
+
+    const kernels = [
+        renderElectric, renderMagnetic,
+        renderBloomExtractEl, renderBloomExtractMag,
+        draw, vertBlur, horBlurEl, horBlurMag
+    ]
+
+    const blurCount = 5
+
+    function render(eX: Texture, eY: Texture, eZ: Texture, mX: Texture, mY: Texture, mZ: Texture,
+        permittivity: Texture, permeability: Texture, conductivity: Texture,
+        gx: number, gy: number, cellSize: number) {
+        const electricEnergy = renderElectric(eX, eY, eZ, gx, gy, cellSize)
+        const magneticEnergy = renderMagnetic(mX, mY, mZ, gx, gy, cellSize)
+        let electricExBlurred: Texture = renderBloomExtractEl(electricEnergy) as Texture
+        let magneticExBlurred: Texture = renderBloomExtractMag(magneticEnergy) as Texture
+        for (let i = 0; i < blurCount; i++) {
+            electricExBlurred = vertBlur(electricExBlurred) as Texture
+            electricExBlurred = horBlurEl(electricExBlurred) as Texture
+            magneticExBlurred = vertBlur(magneticExBlurred) as Texture
+            magneticExBlurred = horBlurMag(magneticExBlurred) as Texture
+        }
+
+        draw(electricEnergy, magneticEnergy, electricExBlurred, magneticExBlurred, permittivity, permeability, conductivity, gx, gy);
+    }
+
+    return {
+        render: render,
+        adjustSize: (size: [number, number]) => {
+            for (let kernel of kernels) {
+                kernel.setOutput(size)
+            }
+        }
+    }
 }
 
 export default function () {
@@ -189,7 +267,7 @@ export default function () {
     // Update render sim output size
     useEffect(() => {
         if (renderSim) {
-            renderSim.setOutput(canvasSize)
+            renderSim.adjustSize(canvasSize)
         }
     }, [renderSim, canvasSize])
 
@@ -287,6 +365,14 @@ export default function () {
         return undefined
     }, [simStep, dt, simulationSpeed])
 
+    useEffect(() => {
+        // TODO: Repaint existing material onto new canvas instead of resetting.
+        if (simulator !== null) {
+            simulator.resetFields()
+            simulator.resetMaterials()
+        }
+    }, [canvasSize, simulator])
+
     const drawStep = useCallback(() => {
         if (simulator && renderSim) {
             if (drawCanvasRef.current) {
@@ -297,9 +383,9 @@ export default function () {
 
             const simData = simulator.getData()
 
-            renderSim(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
+            renderSim.render(simData.electricField[0].values, simData.electricField[1].values, simData.electricField[2].values,
                 simData.magneticField[0].values, simData.magneticField[1].values, simData.magneticField[2].values,
-                simData.permittivity.values, simData.permeability.values, simData.conductivity.values, gridSize, cellSize)
+                simData.permittivity.values, simData.permeability.values, simData.conductivity.values, gridSize[0], gridSize[1], cellSize)
         }
     }, [simulator, renderSim, gridSize, cellSize, resolutionScale, drawCanvasRef])
 

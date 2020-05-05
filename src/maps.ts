@@ -154,7 +154,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
 
     const sourceDescriptors: SourceDescriptor[] = [{
         type: "point",
-        amplitude: 30000,
+        amplitude: 60000,
         frequency: 2,
         position: [Math.round(simulationSettings.gridSize[0] / 10), Math.round(simulationSettings.gridSize[1] / 2)],
         turnOffTime: 0.5

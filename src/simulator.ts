@@ -103,25 +103,27 @@ export class FDTDSimulator implements Simulator {
     private makeFieldTexture: (name: string) => IKernelRunShortcut
     private copyTexture: (name: string) => IKernelRunShortcut
     private copyTextureWithBounds: (name: string) => IKernelRunShortcut
+    private copyTextureWithBoundsFromEncoded: (name: string) => IKernelRunShortcut
 
     private drawOnTexture: { [shape: string]: (name: string) => IKernelRunShortcut }
 
     private kernels: IKernelRunShortcut[] = []
 
     constructor(readonly gpu: GPU, private gridSize: [number, number], private cellSize: number, public reflectiveBoundary: boolean) {
-        const makeKernel = (kernel: KernelFunction) => {
-            const runKernel = this.gpu.createKernel(kernel).setOutput(this.gridSize).setWarnVarUsage(false)
-                .setPipeline(true).setDynamicOutput(true).setDynamicArguments(true).setPrecision("single")
+        const makeKernel = (kernel: KernelFunction<any>) => {
+            const runKernel = this.gpu.createKernel(kernel).setOutput(this.gridSize)
+                .setPipeline(true).setDynamicOutput(true).setDynamicArguments(true)
+                .setTactic("precision").setPrecision("single")
             this.kernels.push(runKernel)
             return runKernel
         }
-        const makeKernelWithFuncs = (kernel: KernelFunction) => makeKernel(kernel).setFunctions([k.getAt])
-        const makeKernelWithFuncsAndConsts = (kernel: KernelFunction) => makeKernelWithFuncs(kernel).setConstants({ cellSize: cellSize })
+        const makeKernelWithFuncs = (kernel: KernelFunction<any>) => makeKernel(kernel).setFunctions([k.isOutOfBounds])
+        const makeKernelWithFuncsAndConsts = (kernel: KernelFunction<any>) => makeKernelWithFuncs(kernel).setConstants({ cellSize: cellSize })
 
         this.makeFieldTexture = memoByName(() => makeKernel(k.makeFieldTexture))
         this.copyTexture = memoByName(() => makeKernel(k.copyTexture))
         this.copyTextureWithBounds = memoByName(() => makeKernel(k.copyTextureWithBounds))
-
+        this.copyTextureWithBoundsFromEncoded = memoByName(() => makeKernel(k.copyTextureWithBoundsFromEncoded))
         const makeField = (name: string, initialValue: number): ScalarField2D => { return { values: this.makeFieldTexture(name)(initialValue) as Texture, shape: this.gridSize } }
 
         this.data = {
@@ -171,9 +173,9 @@ export class FDTDSimulator implements Simulator {
         this.data.permeability.shape = gridSize
         this.data.conductivity.shape = gridSize
 
-        this.data.permittivity.values = this.copyTextureWithBounds("permittivity")(this.data.permittivity.values, oldShape, 1) as Texture
-        this.data.permeability.values = this.copyTextureWithBounds("permeability")(this.data.permeability.values, oldShape, 1) as Texture
-        this.data.conductivity.values = this.copyTextureWithBounds("conductivity")(this.data.conductivity.values, oldShape, 0) as Texture
+        this.data.permittivity.values = this.copyTextureWithBounds("permittivity")(this.data.permittivity.values, oldShape[0], oldShape[1], 1) as Texture
+        this.data.permeability.values = this.copyTextureWithBounds("permeability")(this.data.permeability.values, oldShape[0], oldShape[1], 1) as Texture
+        this.data.conductivity.values = this.copyTextureWithBounds("conductivity")(this.data.conductivity.values, oldShape[0], oldShape[1], 0) as Texture
 
         this.resetFields()
     }
@@ -238,10 +240,10 @@ export class FDTDSimulator implements Simulator {
 
         switch (drawInfo.drawShape) {
             case "square":
-                field.values = drawFunc(drawInfo.center, drawInfo.halfSize, drawInfo.value, keep, copiedValues) as Texture
+                field.values = drawFunc(drawInfo.center[0], drawInfo.center[1], drawInfo.halfSize, drawInfo.value, keep, copiedValues) as Texture
                 break
             case "circle":
-                field.values = drawFunc(drawInfo.center, drawInfo.radius, drawInfo.value, keep, copiedValues) as Texture
+                field.values = drawFunc(drawInfo.center[0], drawInfo.center[1], drawInfo.radius, drawInfo.value, keep, copiedValues) as Texture
                 break
             default:
                 throw Error(`Invalid draw shape: ${JSON.stringify(drawInfo)}`)
@@ -258,16 +260,40 @@ export class FDTDSimulator implements Simulator {
     }
 
     loadPermittivity = (permittivity: number[][]) => {
-        this.data.permittivity.values = this.copyTextureWithBounds("loadPermittivity")(permittivity, [permittivity[0].length, permittivity.length], 1) as Texture
+        const u = encodeScalarField(permittivity)
+        this.data.permittivity.values = this.copyTextureWithBoundsFromEncoded("loadPermittivity")(u, permittivity[0].length, permittivity.length, 1) as Texture
     }
 
     loadPermeability = (permeability: number[][]) => {
-        this.data.permeability.values = this.copyTextureWithBounds("loadPermeability")(permeability, [permeability[0].length, permeability.length], 1) as Texture
+        const u = encodeScalarField(permeability)
+        this.data.permeability.values = this.copyTextureWithBoundsFromEncoded("loadPermeability")(u, permeability[0].length, permeability.length, 1) as Texture
     }
 
     loadConductivity = (conductivity: number[][]) => {
-        this.data.conductivity.values = this.copyTextureWithBounds("loadConductivity")(conductivity, [conductivity[0].length, conductivity.length], 0) as Texture
+        const u = encodeScalarField(conductivity)
+        this.data.conductivity.values = this.copyTextureWithBoundsFromEncoded("loadConductivity")(u, conductivity[0].length, conductivity.length, 0) as Texture
     }
 
     getData = () => this.data
+}
+
+function encodeScalarField(field: number[][]) {
+    const gx = field.length
+    const gy = field[0].length
+
+    const view = new DataView(new ArrayBuffer(4))
+
+    const u = new Uint8Array(gx * gy * 4)
+    for (let i = 0; i < gx; i++) {
+        for (let j = 0; j < gy; j++) {
+            view.setFloat32(0, field[i][j])
+            const encoded = view.getUint32(0)
+            u[i * gy * 4 + j * 4 + 0] = (encoded & 0xFF000000) >>> 24
+            u[i * gy * 4 + j * 4 + 1] = (encoded & 0x00FF0000) >>> 16
+            u[i * gy * 4 + j * 4 + 2] = (encoded & 0x0000FF00) >>> 8
+            u[i * gy * 4 + j * 4 + 3] = (encoded & 0x000000FF)
+        }
+    }
+
+    return u
 }

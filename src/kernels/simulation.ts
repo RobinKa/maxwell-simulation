@@ -1,11 +1,7 @@
 import { IKernelFunctionThis } from "gpu.js"
 
-export function getAt(texture: number[][], shapeX: number, shapeY: number, x: number, y: number) {
-    if (x < 0 || x >= shapeX || y < 0 || y >= shapeY) {
-        return 0
-    }
-
-    return texture[y][x]
+export function isOutOfBounds(shapeX: number, shapeY: number, x: number, y: number): number {
+    return x < 0 || x >= shapeX || y < 0 || y >= shapeY ? 1 : 0
 }
 
 export function makeFieldTexture(this: IKernelFunctionThis, value: number) {
@@ -16,9 +12,10 @@ export function copyTexture(this: IKernelFunctionThis, texture: number[][]) {
     return texture[this.thread.y!][this.thread.x]
 }
 
-export function copyTextureWithBounds(this: IKernelFunctionThis, texture: number[][], bounds: number[], outOfBoundsValue: number) {
+export function copyTextureWithBounds(this: IKernelFunctionThis, texture: number[][], boundsX: number, boundsY: number, outOfBoundsValue: number) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
+    const bounds: [number, number] = [boundsX, boundsY]
 
     if (x < 0 || y < 0 || x >= bounds[0] || y >= bounds[1]) {
         return outOfBoundsValue
@@ -27,26 +24,56 @@ export function copyTextureWithBounds(this: IKernelFunctionThis, texture: number
     return texture[y][x]
 }
 
-export function drawSquare(this: IKernelFunctionThis, pos: number[], size: number, value: number, keep: number, texture: number[][]) {
+export function copyTextureWithBoundsFromEncoded(this: IKernelFunctionThis, texture: Uint8Array, boundsX: number, boundsY: number, outOfBoundsValue: number) {
+    const x = this.thread.x
+    const y = this.thread.y!
+    const gx = this.output.x
+    const bounds: [number, number] = [boundsX, boundsY]
+
+    if (x < 0 || y < 0 || x >= bounds[0] || y >= bounds[1]) {
+        return outOfBoundsValue
+    }
+
+    const u1 = texture[y * gx * 4 + x * 4 + 0]
+    const u2 = texture[y * gx * 4 + x * 4 + 1]
+    const u3 = texture[y * gx * 4 + x * 4 + 2]
+    const u4 = texture[y * gx * 4 + x * 4 + 3]
+
+    const sign = Math.pow(-1, (u1 >>> 7) & 1)
+    const exp = ((u1 & 0x7F) << 1) + ((u2 & 0x80) >>> 7) - 127
+    const mant = ((u2 & 0x7F) << (7 + 8)) + (u3 << 8) + u4
+
+    let mantDec = 1
+    for (let i = 0; i < 23; i++) {
+        mantDec += ((mant >>> i) & 1) / Math.pow(2, 22 - i)
+    }
+
+    return Math.pow(2, exp)
+    //return sign * mantDec * Math.pow(2, exp)
+}
+
+export function drawSquare(this: IKernelFunctionThis, posX: number, posY: number, size: number, value: number, keep: number, texture: number[][]) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
     const gy = this.output.y as number
+    const pos: [number, number] = [posX, posY]
 
-    const oldValue = getAt(texture, gx, gy, x, y)
+    const oldValue = (isOutOfBounds(x, y, gx, gy) * texture[y][x])
 
     const within = Math.max(Math.abs(pos[0] - x), Math.abs(pos[1] - y)) < size
 
     return within ? value + keep * oldValue : oldValue
 }
 
-export function drawCircle(this: IKernelFunctionThis, pos: number[], radius: number, value: number, keep: number, texture: number[][]) {
+export function drawCircle(this: IKernelFunctionThis, posX: number, posY: number, radius: number, value: number, keep: number, texture: number[][]) {
     const x = this.thread.x as number
     const y = this.thread.y! as number
     const gx = this.output.x as number
     const gy = this.output.y as number
+    const pos: [number, number] = [posX, posY]
 
-    const oldValue = getAt(texture, gx, gy, x, y)
+    const oldValue = (isOutOfBounds(x, y, gx, gy) * texture[y][x])
 
     const dx = pos[0] - x
     const dy = pos[1] - y
@@ -62,7 +89,7 @@ export function injectSource(this: IKernelFunctionThis, source: number[][], fiel
     const gx = this.output.x as number
     const gy = this.output.y as number
 
-    return getAt(field, gx, gy, x, y) + getAt(source, gx, gy, x, y) * dt
+    return (isOutOfBounds(x, y, gx, gy) * field[y][x]) + (isOutOfBounds(x, y, gx, gy) * source[y][x]) * dt
 }
 
 export function decaySource(this: IKernelFunctionThis, source: number[][], dt: number) {
@@ -71,7 +98,7 @@ export function decaySource(this: IKernelFunctionThis, source: number[][], dt: n
     const gx = this.output.x as number
     const gy = this.output.y as number
 
-    return getAt(source, gx, gy, x, y) * Math.pow(0.1, dt)
+    return (isOutOfBounds(x, y, gx, gy) * source[y][x]) * Math.pow(0.1, dt)
 }
 
 export function updateMagneticX(this: IKernelFunctionThis, electricFieldZ: number[][], permeability: number[][], conductivity: number[][], magneticFieldX: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
@@ -90,16 +117,16 @@ export function updateMagneticX(this: IKernelFunctionThis, electricFieldZ: numbe
         }
     }
 
-    const perm = getAt(permeability, gx, gy, x, y)
-    const cond = getAt(conductivity, gx, gy, x, y)
+    const perm = (isOutOfBounds(x, y, gx, gy) * permeability[y][x])
+    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
     const c = cond * dt / (2 * perm)
     const d = 1 / (1 + c)
     const alpha = (1 - c) * d
     const beta = dt / (perm * cellSize) * d
 
     // d_Y Z - d_Z Y, but d_Z = 0 in 2d
-    return alpha * getAt(magneticFieldX, gx, gy, x, y) - beta * (
-        (getAt(electricFieldZ, gx, gy, x, y + 1) - getAt(electricFieldZ, gx, gy, x, y)))
+    return alpha * (isOutOfBounds(x, y, gx, gy) * magneticFieldX[y][x]) - beta * (
+        ((isOutOfBounds(x, y + 1, gx, gy) * electricFieldZ[y + 1][x]) - (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x])))
 }
 
 export function updateMagneticY(this: IKernelFunctionThis, electricFieldZ: number[][], permeability: number[][], conductivity: number[][], magneticFieldY: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
@@ -118,16 +145,16 @@ export function updateMagneticY(this: IKernelFunctionThis, electricFieldZ: numbe
         }
     }
 
-    const perm = getAt(permeability, gx, gy, x, y)
-    const cond = getAt(conductivity, gx, gy, x, y)
+    const perm = (isOutOfBounds(x, y, gx, gy) * permeability[y][x])
+    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
     const c = cond * dt / (2 * perm)
     const d = 1 / (1 + c)
     const alpha = (1 - c) * d
     const beta = dt / (perm * cellSize) * d
 
     // d_Z X - d_X Z, but d_Z = 0 in 2d
-    return alpha * getAt(magneticFieldY, gx, gy, x, y) - beta * (
-        -(getAt(electricFieldZ, gx, gy, x + 1, y) - getAt(electricFieldZ, gx, gy, x, y)))
+    return alpha * (isOutOfBounds(x, y, gx, gy) * magneticFieldY[y][x]) - beta * (
+        -((isOutOfBounds(x + 1, y, gx, gy) * electricFieldZ[y][x + 1]) - (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x])))
 }
 
 export function updateMagneticZ(this: IKernelFunctionThis, electricFieldX: number[][], electricFieldY: number[][], permeability: number[][], conductivity: number[][], magneticFieldZ: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
@@ -146,17 +173,17 @@ export function updateMagneticZ(this: IKernelFunctionThis, electricFieldX: numbe
         }
     }
 
-    const perm = getAt(permeability, gx, gy, x, y)
-    const cond = getAt(conductivity, gx, gy, x, y)
+    const perm = (isOutOfBounds(x, y, gx, gy) * permeability[y][x])
+    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
     const c = cond * dt / (2 * perm)
     const d = 1 / (1 + c)
     const alpha = (1 - c) * d
     const beta = dt / (perm * cellSize) * d
 
     // d_X Y - d_Y X
-    return alpha * getAt(magneticFieldZ, gx, gy, x, y) - beta * (
-        (getAt(electricFieldY, gx, gy, x + 1, y) - getAt(electricFieldY, gx, gy, x, y)) -
-        (getAt(electricFieldX, gx, gy, x, y + 1) - getAt(electricFieldX, gx, gy, x, y)))
+    return alpha * (isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x]) - beta * (
+        ((isOutOfBounds(x + 1, y, gx, gy) * electricFieldY[y][x + 1]) - (isOutOfBounds(x, y, gx, gy) * electricFieldY[y][x])) -
+        ((isOutOfBounds(x, y + 1, gx, gy) * electricFieldX[y + 1][x]) - (isOutOfBounds(x, y, gx, gy) * electricFieldX[y][x])))
 }
 
 export function updateElectricX(this: IKernelFunctionThis, magneticFieldZ: number[][], permittivity: number[][], conductivity: number[][], electricFieldX: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
@@ -175,16 +202,16 @@ export function updateElectricX(this: IKernelFunctionThis, magneticFieldZ: numbe
         }
     }
 
-    const perm = getAt(permittivity, gx, gy, x, y)
-    const cond = getAt(conductivity, gx, gy, x, y)
+    const perm = (isOutOfBounds(x, y, gx, gy) * permittivity[y][x])
+    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
     const c = cond * dt / (2 * perm)
     const d = 1 / (1 + c)
     const alpha = (1 - c) * d
     const beta = dt / (perm * cellSize) * d
 
     // d_Y Z - d_Z Y, but d_Z = 0 in 2d
-    return alpha * getAt(electricFieldX, gx, gy, x, y) + beta * (
-        (getAt(magneticFieldZ, gx, gy, x, y) - getAt(magneticFieldZ, gx, gy, x, y - 1)))
+    return alpha * (isOutOfBounds(x, y, gx, gy) * electricFieldX[y][x]) + beta * (
+        ((isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x]) - (isOutOfBounds(x, y - 1, gx, gy) * magneticFieldZ[y - 1][x])))
 }
 
 export function updateElectricY(this: IKernelFunctionThis, magneticFieldZ: number[][], permittivity: number[][], conductivity: number[][], electricFieldY: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
@@ -203,16 +230,16 @@ export function updateElectricY(this: IKernelFunctionThis, magneticFieldZ: numbe
         }
     }
 
-    const perm = getAt(permittivity, gx, gy, x, y)
-    const cond = getAt(conductivity, gx, gy, x, y)
+    const perm = (isOutOfBounds(x, y, gx, gy) * permittivity[y][x])
+    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
     const c = cond * dt / (2 * perm)
     const d = 1 / (1 + c)
     const alpha = (1 - c) * d
     const beta = dt / (perm * cellSize) * d
 
     // d_Z X - d_X Z, but d_Z = 0 in 2d
-    return alpha * getAt(electricFieldY, gx, gy, x, y) + beta * (
-        -(getAt(magneticFieldZ, gx, gy, x, y) - getAt(magneticFieldZ, gx, gy, x - 1, y)))
+    return alpha * (isOutOfBounds(x, y, gx, gy) * electricFieldY[y][x]) + beta * (
+        -((isOutOfBounds(x, y, gx, gy) * magneticFieldZ[y][x]) - (isOutOfBounds(x - 1, y, gx, gy) * magneticFieldZ[y][x - 1])))
 }
 
 export function updateElectricZ(this: IKernelFunctionThis, magneticFieldX: number[][], magneticFieldY: number[][], permittivity: number[][], conductivity: number[][], electricFieldZ: number[][], dt: number, cellSize: number, reflectiveBoundary: boolean) {
@@ -231,15 +258,15 @@ export function updateElectricZ(this: IKernelFunctionThis, magneticFieldX: numbe
         }
     }
 
-    const perm = getAt(permittivity, gx, gy, x, y)
-    const cond = getAt(conductivity, gx, gy, x, y)
+    const perm = (isOutOfBounds(x, y, gx, gy) * permittivity[y][x])
+    const cond = (isOutOfBounds(x, y, gx, gy) * conductivity[y][x])
     const c = cond * dt / (2 * perm)
     const d = 1 / (1 + c)
     const alpha = (1 - c) * d
     const beta = dt / (perm * cellSize) * d
 
     // d_X Y - d_Y X
-    return alpha * getAt(electricFieldZ, gx, gy, x, y) + beta * (
-        (getAt(magneticFieldY, gx, gy, x, y) - getAt(magneticFieldY, gx, gy, x - 1, y)) -
-        (getAt(magneticFieldX, gx, gy, x, y) - getAt(magneticFieldX, gx, gy, x, y - 1)))
+    return alpha * (isOutOfBounds(x, y, gx, gy) * electricFieldZ[y][x]) + beta * (
+        ((isOutOfBounds(x, y, gx, gy) * magneticFieldY[y][x]) - (isOutOfBounds(x - 1, y, gx, gy) * magneticFieldY[y][x - 1])) -
+        ((isOutOfBounds(x, y, gx, gy) * magneticFieldX[y][x]) - (isOutOfBounds(x, y - 1, gx, gy) * magneticFieldX[y - 1][x])))
 }
