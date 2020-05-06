@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { EMState, createEM } from "./em"
 import { makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./em/drawing"
-import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from './em/serialization'
+import { signalSourceToDescriptor, descriptorToSignalSource, makeMaterialMap } from './em/serialization'
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
 import { toggleFullScreen, clamp, qualityPresets } from './util'
 import * as Icon from "./icons"
@@ -338,30 +338,13 @@ export default function () {
 
     const hideWhenInputDownStyle = useMemo<React.CSSProperties>(() => isInputDown ? { pointerEvents: "none", opacity: 0.2 } : {}, [isInputDown])
 
-    const getMaterialMap = useMemo<() => (MaterialMap | null)>(() => {
-        return () => {
-            // TODO
-            /*if (simulator) {
-                const simData = simulator.getData()
-                return {
-                    permittivity: simData.permittivity.values.toArray() as number[][],
-                    permeability: simData.permeability.values.toArray() as number[][],
-                    conductivity: simData.conductivity.values.toArray() as number[][],
-                    shape: [simData.permeability.shape[0], simData.permeability.shape[1]]
-                }
-            }*/
-
-            return null
-        }
-    }, [em])
-
     const generateShareUrl = useCallback(() => {
         if (em) {
             setShareInProgress(true)
-            const materialMap = getMaterialMap()
-            if (materialMap) {
+            const material = em.getMaterial()
+            if (material) {
                 shareSimulatorMap({
-                    materialMap: materialMap,
+                    materialMap: makeMaterialMap(material),
                     simulationSettings: {
                         cellSize: cellSize,
                         dt: dt,
@@ -375,7 +358,7 @@ export default function () {
                     .finally(() => setShareInProgress(false))
             }
         }
-    }, [getMaterialMap, dt, cellSize, gridSize, em])
+    }, [dt, cellSize, gridSize, em])
 
     const shareUrl = useMemo(() => {
         return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null

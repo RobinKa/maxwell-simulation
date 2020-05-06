@@ -71,6 +71,10 @@ export interface Simulator {
     setGridSize: (gridSize: [number, number]) => void
     getReflectiveBoundary: () => boolean
     setReflectiveBoundary: (reflectiveBoundary: boolean) => void
+    drawMaterial: (materialType: MaterialType, drawInfo: DrawInfo) => void
+    loadMaterial: (material: number[][][]) => void
+    loadMaterialFromComponents: (permittivity: number[][], permeability: number[][], conductivity: number[][]) => void
+    getMaterial: () => number[][][]
 }
 
 export class FDTDSimulator implements Simulator {
@@ -85,7 +89,8 @@ export class FDTDSimulator implements Simulator {
 
     private drawOnTexture: { [shape: string]: DrawCommand }
 
-    private copyToMaterial: DrawCommand
+    private copyUint8ToFloat16: DrawCommand
+    private copyFloat16ToUint8: DrawCommand
 
     private frameBuffers: Framebuffer2D[]
     private alphaBetaDt: number // dt that the alpha beta values were calculated for
@@ -225,7 +230,11 @@ export class FDTDSimulator implements Simulator {
             }),
         }
 
-        this.copyToMaterial = makeFragFn(k.copy, this.data.material, {
+        this.copyUint8ToFloat16 = makeFragFn(k.copyUint8ToFloat16, this.data.material, {
+            texture: (_: any, props: any) => props.texture
+        })
+
+        this.copyFloat16ToUint8 = makeFragWithFboPropFn(k.copyFloat16ToUint8, {
             texture: (_: any, props: any) => props.texture
         })
 
@@ -410,9 +419,11 @@ export class FDTDSimulator implements Simulator {
             mag: "nearest",
         })
 
-        this.copyToMaterial({
+        this.copyUint8ToFloat16({
             texture: materialTexture
         })
+
+        materialTexture.destroy()
 
         this.updateAlphaBetaFromMaterial(this.alphaBetaDt)
     }
@@ -424,4 +435,47 @@ export class FDTDSimulator implements Simulator {
     }
 
     getData = () => this.data
+
+    getMaterial = () => {
+        const fbo = this.regl.framebuffer({
+            color: this.regl.texture({
+                width: this.gridSize[0],
+                height: this.gridSize[1],
+                wrap: "clamp",
+                type: "uint8",
+                format: "rgba",
+                min: "nearest",
+                mag: "nearest",
+            }),
+            depthStencil: false
+        })
+
+        this.copyFloat16ToUint8({
+            fbo: fbo,
+            texture: this.data.material.current
+        })
+
+        const materialData = this.regl.read({
+            framebuffer: fbo
+        })
+
+        fbo.destroy()
+
+        // Uint8 to float with correct scaling
+        const materialFloats: number[][][] = []
+        for (let y = 0; y < this.gridSize[1]; y++) {
+            const row: number[][] = []
+            for (let x = 0; x < this.gridSize[0]; x++) {
+                row.push([
+                    0.1 * (materialData[y * this.gridSize[0] * 4 + x * 4 + 0] - 127),
+                    0.1 * (materialData[y * this.gridSize[0] * 4 + x * 4 + 1] - 127),
+                    0.1 * (materialData[y * this.gridSize[0] * 4 + x * 4 + 2] - 127),
+                    // +3 is unused
+                ])
+            }
+            materialFloats.push(row)
+        }
+
+        return materialFloats
+    }
 }

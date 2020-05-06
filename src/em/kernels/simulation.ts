@@ -215,7 +215,7 @@ export const vert = `
     }
 `
 
-export const copy = `
+export const copyUint8ToFloat16 = `
     precision highp float;
 
     uniform sampler2D texture;
@@ -224,5 +224,17 @@ export const copy = `
 
     void main() {
         gl_FragColor = 0.1 * (-128.0 + 256.0 * texture2D(texture, uv));
+    }
+`
+
+export const copyFloat16ToUint8 = `
+    precision highp float;
+
+    uniform sampler2D texture;
+
+    varying vec2 uv;
+
+    void main() {
+        gl_FragColor = (128.0 + 10.0 * texture2D(texture, uv)) / 256.0;
     }
 `

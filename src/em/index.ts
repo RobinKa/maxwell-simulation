@@ -1,5 +1,5 @@
 import { createReglFromCanvas, makeRenderSimulatorCanvas } from "./rendering"
-import { FDTDSimulator, MaterialType } from "./simulator"
+import { FDTDSimulator, MaterialType, Simulator } from "./simulator"
 import { SignalSource } from "./sources"
 import { DrawInfo } from "./drawing"
 
@@ -24,6 +24,7 @@ export type EMState = {
     resetMaterials: () => void
 
     drawMaterial: (materialType: MaterialType, drawInfo: DrawInfo) => void
+    getMaterial: () => number[][][]
 }
 
 export function createEM(canvas: HTMLCanvasElement, gridSize: [number, number],
@@ -31,7 +32,7 @@ export function createEM(canvas: HTMLCanvasElement, gridSize: [number, number],
     const regl = createReglFromCanvas(canvas)
 
     const { render, adjustSize } = makeRenderSimulatorCanvas(regl, gridSize)
-    const sim = new FDTDSimulator(regl, gridSize, cellSize, reflectiveBoundary, dt)
+    const sim: Simulator = new FDTDSimulator(regl, gridSize, cellSize, reflectiveBoundary, dt)
 
     const renderToCanvas = (showElectric: boolean, showMagnetic: boolean) => {
         const simData = sim.getData()
@@ -66,6 +67,7 @@ export function createEM(canvas: HTMLCanvasElement, gridSize: [number, number],
         loadMaterialFromComponents: sim.loadMaterialFromComponents,
         resetFields: sim.resetFields,
         resetMaterials: sim.resetMaterials,
-        drawMaterial: sim.drawMaterial
+        drawMaterial: sim.drawMaterial,
+        getMaterial: sim.getMaterial
     }
 }
