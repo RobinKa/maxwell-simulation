@@ -3,7 +3,7 @@ import { SimulatorMap, SimulationSettings } from "./serialization"
 import { FDTDSimulator, DrawShapeType } from "./simulator"
 import { SignalSource, PointSignalSource } from "./sources"
 import * as maps from "./maps"
-import { QualityPreset } from "./util"
+import { QualityPreset, combineMaterialMaps } from "./util"
 
 export type CollapsibleContainerProps = {
     children?: ReactElement<any> | ReactElement<any>[]
@@ -137,9 +137,11 @@ export function ExamplesComponent(props: ExamplesComponentProps) {
     const loadMap = useCallback((simulatorMap: SimulatorMap) => {
         if (simulator) {
             simulator.resetFields()
-            simulator.loadPermeability(simulatorMap.materialMap.permeability)
-            simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
-            simulator.loadConductivity(simulatorMap.materialMap.conductivity)
+            simulator.loadMaterial(combineMaterialMaps(
+                simulatorMap.materialMap.permittivity,
+                simulatorMap.materialMap.permeability,
+                simulatorMap.materialMap.conductivity
+            ))
         }
 
         const loadedSources = simulatorMap.sourceDescriptors.map(desc => {

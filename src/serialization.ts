@@ -1,4 +1,4 @@
-import * as pako from "pako"
+import pako from "pako"
 import { SignalSource, PointSignalSource } from "./sources"
 
 export const currentSimulatorMapVersion = 1

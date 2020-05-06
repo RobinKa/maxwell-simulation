@@ -73,6 +73,10 @@ export interface Simulator {
     resetMaterials: () => void
     injectSignal: (drawInfo: DrawInfo, dt: number) => void
     getData: () => SimulationData
+    getCellSize: () => number
+    setCellSize: (cellSize: number) => void
+    getGridSize: () => [number, number]
+    setGridSize: (gridSize: [number, number]) => void
 }
 
 export class FDTDSimulator implements Simulator {
@@ -86,6 +90,8 @@ export class FDTDSimulator implements Simulator {
     private decaySource: DrawCommand
 
     private drawOnTexture: { [shape: string]: DrawCommand }
+
+    private copyToMaterial: DrawCommand
 
     private frameBuffers: Framebuffer2D[]
     private alphaBetaDt: number // dt that the alpha beta values were calculated for
@@ -225,6 +231,10 @@ export class FDTDSimulator implements Simulator {
             }),
         }
 
+        this.copyToMaterial = makeFragFn(k.copy, this.data.material, {
+            texture: (_: any, props: any) => props.texture
+        })
+
         this.resetFields()
         this.resetMaterials()
     }
@@ -238,6 +248,8 @@ export class FDTDSimulator implements Simulator {
         })
     }
 
+    getGridSize = () => this.gridSize;
+
     setGridSize = (gridSize: [number, number]) => {
         this.gridSize = gridSize
 
@@ -247,6 +259,8 @@ export class FDTDSimulator implements Simulator {
 
         this.resetFields()
     }
+
+    getCellSize = () => this.cellSize;
 
     setCellSize = (cellSize: number) => {
         this.cellSize = cellSize
@@ -390,16 +404,20 @@ export class FDTDSimulator implements Simulator {
         this.drawOnTexture[drawInfo.drawShape](uniforms)
     }
 
-    loadPermittivity = (permittivity: number[][]) => {
-        // TODO
-    }
+    loadMaterial = (material: number[][][]) => {
+        const materialTexture = this.regl.texture({
+            data: material,
+            format: "rgb",
+            type: "uint8",
+            min: "nearest",
+            mag: "nearest",
+        })
 
-    loadPermeability = (permeability: number[][]) => {
-        // TODO
-    }
+        this.copyToMaterial({
+            texture: materialTexture
+        })
 
-    loadConductivity = (conductivity: number[][]) => {
-        // TODO
+        this.updateAlphaBetaFromMaterial(this.alphaBetaDt)
     }
 
     getData = () => this.data

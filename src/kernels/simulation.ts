@@ -214,3 +214,15 @@ export const vert = `
         gl_Position = vec4(position, 0, 1);
     }
 `
+
+export const copy = `
+    precision highp float;
+
+    uniform sampler2D texture;
+
+    varying vec2 uv;
+
+    void main() {
+        gl_FragColor = 0.1 * (-128.0 + 256.0 * texture2D(texture, uv));
+    }
+`

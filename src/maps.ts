@@ -36,7 +36,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
     const slitSize = 0.2 / simulationSettings.cellSize
 
     for (let y = 0; y < simulationSettings.gridSize[1]; y++) {
-        const isWallRow = Math.abs(y - simulationSettings.gridSize[1] / 5) < 2
+        const isWallRow = Math.abs(y - simulationSettings.gridSize[1] * 4 / 5) < 2
         const permittivityRow = new Array(simulationSettings.gridSize[0]).fill(isWallRow ? 100 : 1)
 
         if (isWallRow) {
@@ -58,7 +58,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
         type: "point",
         amplitude: 30000,
         frequency: 3,
-        position: [Math.round(slitCenterX), Math.round(simulationSettings.gridSize[1] / 15)]
+        position: [0.5, 14 / 15]
     }]
 
     return {
@@ -109,13 +109,13 @@ export function fiberOptics(simulationSettings: SimulationSettings): SimulatorMa
         type: "point",
         amplitude: 10000,
         frequency: 5,
-        position: [endPoint[0] - 1, endPoint[1]],
+        position: [(endPoint[0] - 1) / simulationSettings.gridSize[0], 1 - endPoint[1] / simulationSettings.gridSize[1]],
         turnOffTime: 0.5
     }, {
         type: "point",
         amplitude: 10000,
         frequency: 5,
-        position: [endPoint[0] + 2, endPoint[1]],
+        position: [(endPoint[0] + 2) / simulationSettings.gridSize[0], 1 - endPoint[1] / simulationSettings.gridSize[1]],
         turnOffTime: 0.5
     },]
 
@@ -156,7 +156,7 @@ export function lens(simulationSettings: SimulationSettings): SimulatorMap {
         type: "point",
         amplitude: 60000,
         frequency: 2,
-        position: [Math.round(simulationSettings.gridSize[0] / 10), Math.round(simulationSettings.gridSize[1] / 2)],
+        position: [1 / 10, 1 / 2],
         turnOffTime: 0.5
     }]
 

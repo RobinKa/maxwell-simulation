@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
-import { toggleFullScreen, clamp, QualityPreset } from './util'
+import { toggleFullScreen, clamp, QualityPreset, combineMaterialMaps } from './util'
 import * as Icon from "./icons"
 import "./App.css"
 import { SignalSource } from './sources'
@@ -254,7 +254,7 @@ const makeRenderSimulatorCanvas = (regl: Regl, canvasSize: [number, number]) => 
             threshold: 1
         })
 
-        const blurCount = 5
+        const blurCount = 3
         for (let i = 0; i < blurCount; i++) {
             blurVert({
                 texture: i === 0 ? energyFbo : fbos[0]
@@ -340,9 +340,11 @@ export default function () {
             console.log(`Loading ${urlShareId}`)
             getSharedSimulatorMap(urlShareId).then(simulatorMap => {
                 // Load material
-                simulator.loadPermittivity(simulatorMap.materialMap.permittivity)
-                simulator.loadPermeability(simulatorMap.materialMap.permeability)
-                simulator.loadConductivity(simulatorMap.materialMap.conductivity)
+                simulator.loadMaterial(combineMaterialMaps(
+                    simulatorMap.materialMap.permittivity,
+                    simulatorMap.materialMap.permeability,
+                    simulatorMap.materialMap.conductivity
+                ))
 
                 // Load settings
                 setDt(simulatorMap.simulationSettings.dt)
