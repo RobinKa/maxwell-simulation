@@ -23,8 +23,15 @@ export function CollapsibleContainer(props: CollapsibleContainerProps) {
     const { collapsed, setCollapsed, id, className, buttonStyle, style, children, title } = props
 
     return (
-        <div id={id} className={className} style={{ textAlign: "center", background: "rgb(33, 33, 33)", fontWeight: "lighter", color: "white", height: "400px", ...style }}>
-            <button onClick={e => setCollapsed(!collapsed)} style={{ width: "30px", float: "left", height: "100%", background: "rgb(50, 50, 50)", border: "0px", color: "white", fontWeight: "bold", fontSize: "20px", cursor: "pointer", ...buttonStyle }}>
+        <div id={id} className={className} style={{
+            textAlign: "center", background: "rgb(33, 33, 33)",
+            fontWeight: "lighter", color: "white", height: "400px", ...style
+        }}>
+            <button onClick={e => setCollapsed(!collapsed)} style={{
+                width: "30px", float: "left", height: "100%", background: "rgb(50, 50, 50)",
+                border: "0px", color: "white", fontWeight: "bold", fontSize: "20px",
+                cursor: "pointer", ...buttonStyle
+            }}>
                 {collapsed ? "<" : ">"}
             </button>
             <div style={{ float: "right" }}>
@@ -76,7 +83,8 @@ export function LabeledSlider(props: LabeledSliderProps) {
         <div>
             <label>{props.label}</label>
             {allowNegative && <>
-                <input style={{ marginLeft: "10px" }} type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} /><label>Negative</label>
+                <input style={{ marginLeft: "10px" }} type="checkbox" checked={negative} onChange={e => setNegative(e.target.checked)} />
+                <label>Negative</label>
             </>}
             <div>
                 <input type="range" ref={rangeSliderRef} min={props.min} max={props.max} value={absValue} step={props.step}
@@ -326,13 +334,19 @@ export function MaterialBrushMenu(props: MaterialBrushMenuProps) {
 
     return (
         <div style={{ padding: "10px" }}>
-            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to 45° line</label>
-            <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={brushShapeIndex} setSelectedOption={setBrushShapeIndex} />
+            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} />
+            <label>Snap to 45° line</label>
+            <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]}
+                selectedOption={brushShapeIndex} setSelectedOption={setBrushShapeIndex} />
             <div>
-                <LabeledSlider label={brushSizeLabel} value={props.materialBrushSize} setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
-                <LabeledSlider label="ε value" value={props.permittivityBrushValue} setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
-                <LabeledSlider label="µ value" value={props.permeabilityBrushValue} setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
-                <LabeledSlider label="σ value" value={props.conductivityBrushValue} setValue={props.setConductivityBrushValue} min={0} max={20} step={0.25} allowNegative={true} />
+                <LabeledSlider label={brushSizeLabel} value={props.materialBrushSize}
+                    setValue={props.setMaterialBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label="ε value" value={props.permittivityBrushValue}
+                    setValue={props.setPermittivityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
+                <LabeledSlider label="µ value" value={props.permeabilityBrushValue}
+                    setValue={props.setPermeabilityBrushValue} min={-1} max={10} step={0.1} allowNegative={true} logarithmic={true} displayDigits={1} />
+                <LabeledSlider label="σ value" value={props.conductivityBrushValue}
+                    setValue={props.setConductivityBrushValue} min={0} max={20} step={0.25} allowNegative={true} />
             </div>
         </div>
     )
@@ -365,12 +379,17 @@ export function SignalBrushMenu(props: SignalBrushMenuProps) {
 
     return (
         <div style={{ padding: "10px" }}>
-            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} /><label>Snap to 45° line</label>
-            <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]} selectedOption={brushShapeIndex} setSelectedOption={setBrushShapeIndex} />
+            <input type="checkbox" checked={props.snapInput} onChange={e => props.setSnapInput(e.target.checked)} />
+            <label>Snap to 45° line</label>
+            <OptionSelector buttonStyle={{ height: "24px" }} options={["Square", "Circle"]}
+                selectedOption={brushShapeIndex} setSelectedOption={setBrushShapeIndex} />
             <div>
-                <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize} setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
-                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue} setValue={props.setSignalBrushValue} min={1} max={100} step={1} />
-                <LabeledSlider label="Signal frequency" value={props.signalFrequency} setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
+                <LabeledSlider label={brushSizeLabel} value={props.signalBrushSize}
+                    setValue={props.setSignalBrushSize} min={1} max={100} step={1} />
+                <LabeledSlider label="Signal amplitude" value={props.signalBrushValue}
+                    setValue={props.setSignalBrushValue} min={1} max={100} step={1} />
+                <LabeledSlider label="Signal frequency" value={props.signalFrequency}
+                    setValue={props.setSignalFrequency} min={0} max={25} step={0.25} />
             </div>
         </div>
     )
@@ -382,11 +401,9 @@ type MultiMenuChildProps<TState> = {
 }
 
 export function MultiMenuChild<TState>(props: MultiMenuChildProps<TState>) {
-    return (
-        <>
-            {props.children}
-        </>
-    )
+    return <>
+        {props.children}
+    </>
 }
 
 export type MultiMenuProps<TState> = {
@@ -399,11 +416,9 @@ export function MultiMenu<TState>(props: MultiMenuProps<TState>) {
         return props.children?.filter(child => child.props.activateForState === props.activeState)
     }, [props.activeState, props.children])
 
-    return (
-        <>
-            {activeChildren}
-        </>
-    )
+    return <>
+        {activeChildren}
+    </>
 }
 
 export type InfoBoxProps = {
@@ -418,9 +433,15 @@ export function InfoBox(props: InfoBoxProps) {
             <div style={{ position: "absolute", backgroundColor: "rgb(30, 30, 30)", left: "50%", top: "50%", marginLeft: "-150px", marginTop: "-70px", width: "300px", height: "140px", textAlign: "center", padding: "10px", color: "white", fontWeight: "lighter" }}>
                 <div>
                     Made by <a href="https://github.com/RobinKa" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Robin Kahlow</a>. If you have feedback, ideas for improvement, bug reports or anything else open an issue on <a href="https://github.com/RobinKa/maxwell-simulation/issues" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">GitHub</a> or <a href="mailto:tora@warlock.ai?subject=EM simulation feedback" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }}>send an email to tora@warlock.ai</a>.
-            </div>
-                <div style={{ marginTop: "5px" }}><a href="https://github.com/RobinKa/maxwell-simulation" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Source code</a></div>
-                <div style={{ marginTop: "5px" }}>Icons by <a href="https://icons8.com/" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Icons8</a></div>
+                </div>
+                <div style={{ marginTop: "5px" }}>
+                    <a href="https://github.com/RobinKa/maxwell-simulation" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">
+                        Source code
+                    </a>
+                </div>
+                <div style={{ marginTop: "5px" }}>
+                    Icons by <a href="https://icons8.com/" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Icons8</a>
+                </div>
             </div>
         </div>
     }</>

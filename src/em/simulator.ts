@@ -58,22 +58,126 @@ export type SimulationData = {
     electricSourceField: DoubleFramebuffer2D
 }
 
+/**
+ * Simulates the electromagnetic field with materials.
+ */
 export interface Simulator {
+    /**
+     * Performs the update step for the electric field.
+     * @param dt Time step size
+     */
     stepElectric: (dt: number) => void
+
+    /**
+     * Performs the update step for the magnetic field.
+     * @param dt Time step size
+     */
     stepMagnetic: (dt: number) => void
+
+    /**
+     * Resets the electric, magnetic and source fields
+     * and sets the time back to `0`.
+     */
     resetFields: () => void
+
+    /**
+     * Resets the materials to their default values of
+     * `1` for permittivity and permeability and `0` for
+     * conductivity.
+     */
     resetMaterials: () => void
+
+    /**
+     * Injects a value into the electric source field.
+     * @param drawInfo Draw info that specifies where and
+     * what values to inject.
+     * @param dt Time step size
+     */
     injectSignal: (drawInfo: DrawInfo, dt: number) => void
+
+    /**
+     * Returns the simulation data containing the frame-buffers
+     * for the fields and materials.
+     */
     getData: () => SimulationData
+
+    /**
+     * Returns the size of a cell.
+     */
     getCellSize: () => number
+
+    /**
+     * Sets the size of a cell.
+     * @param cellSize Size of a cell
+     */
     setCellSize: (cellSize: number) => void
+
+    /**
+     * Returns the width and height of the grid in
+     * number of cells.
+     */
     getGridSize: () => [number, number]
+
+    /**
+     * Sets the width and height of the grid in
+     * number of cells.
+     * @param reflectiveBoundary Width and height of the grid in
+     * number of cells.
+     */
     setGridSize: (gridSize: [number, number]) => void
+
+    /**
+     * Returns whether the grid boundary is reflective.
+     */
     getReflectiveBoundary: () => boolean
+
+    /**
+     * Sets whether the grid boundary is reflective.
+     * @param reflectiveBoundary Whether the grid boundary is reflective
+     */
     setReflectiveBoundary: (reflectiveBoundary: boolean) => void
+
+    /**
+     * Draws values onto a material.
+     * @param materialType Material to draw onto
+     * @param drawInfo Draw info that specifies where and
+     * what values to draw.
+     */
     drawMaterial: (materialType: MaterialType, drawInfo: DrawInfo) => void
+
+    /**
+     * Loads a material from a 3D array.
+     * @param material Material of shape `[height, width, 3]`.
+     * 
+     * Channel 0: Permittivity
+     * 
+     * Channel 1: Permeability
+     * 
+     * Channel 2: Conductivity
+     */
     loadMaterial: (material: number[][][]) => void
+
+    /**
+     * Loads a material from arrays.
+     * @param permittivity Array of shape `[height, width]`
+     * specifying the permittivity at every cell.
+     * @param permeability Array of shape `[height, width]`
+     * specifying the permeability at every cell.
+     * @param conductivity Array of shape `[height, width]`
+     * specifying the conductivity at every cell.
+     */
     loadMaterialFromComponents: (permittivity: number[][], permeability: number[][], conductivity: number[][]) => void
+
+    /**
+     * Returns the material as a 3D array.
+     * @param material Material of shape `[height, width, 3]`.
+     * 
+     * Channel 0: Permittivity
+     * 
+     * Channel 1: Permeability
+     * 
+     * Channel 2: Conductivity
+     */
     getMaterial: () => number[][][]
 }
 

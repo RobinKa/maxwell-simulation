@@ -2,11 +2,11 @@ import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { EMState, createEM } from "./em"
 import { makeDrawSquareInfo, makeDrawCircleInfo, DrawShape } from "./em/drawing"
 import { signalSourceToDescriptor, descriptorToSignalSource, makeMaterialMap } from './em/serialization'
-import { 
+import {
     SideBarType, BrushType, CollapsibleContainer, SettingsComponent, ExamplesComponent,
     MaterialBrushMenu, SignalBrushMenu, MultiMenu, MultiMenuChild, InfoBox, LoadingIndicator,
     ShareBox, ResetButtons, BrushSelectionButtons, MenuSelectionButtons, BrushCursor, MiscButtons,
-    InteractiveCanvas, FullscreenView 
+    InteractiveCanvas, FullscreenView
 } from './components'
 import { clamp, qualityPresets } from './util'
 import { getSharedSimulatorMap, shareSimulatorMap } from './share'
@@ -84,7 +84,6 @@ export default function () {
         return () => window.removeEventListener("resize", adjustCanvasSize)
     }, [resolutionScale])
 
-
     // Load share id
     useEffect(() => {
         if (em && urlShareId) {
@@ -152,7 +151,7 @@ export default function () {
     const [permeabilityBrushValue, setPermeabilityBrushValue] = useState(defaultPermeabilityBrushValue)
     const [conductivityBrushValue, setConductivityBrushValue] = useState(defaultConductivityBrushValue)
     const [signalFrequency, setSignalFrequency] = useState(defaultSignalFrequency)
-    
+
     const [activeBrush, setActiveBrush] = useState(BrushType.Signal)
 
     const [mousePosition, setMousePosition] = useState<[number, number] | null>(null)
@@ -168,6 +167,8 @@ export default function () {
     // Snap input across a line
     const [snapInput, setSnapInput] = useState(false)
 
+    // Convert from window location to the coordinates used
+    // by the simulator's draw function.
     const windowToSimulationPoint = useMemo(() => {
         return (windowPoint: [number, number]) => {
             const simulationPoint: [number, number] = [
@@ -178,6 +179,7 @@ export default function () {
         }
     }, [windowSize])
 
+    // Simulate one step
     const simStep = useCallback(() => {
         if (em) {
             if (mouseDownPos.current !== null) {
@@ -196,6 +198,7 @@ export default function () {
         }
     }, [em, dt, signalFrequency, signalBrushValue, signalBrushSize, windowToSimulationPoint, activeBrushShape, gridSize])
 
+    // Change simulation speed
     useEffect(() => {
         if (simulationSpeed > 0) {
             const timer = setInterval(simStep, 1000 / simulationSpeed * dt)
@@ -205,6 +208,7 @@ export default function () {
         return undefined
     }, [simStep, dt, simulationSpeed])
 
+    // Draw one frame
     const drawStep = useCallback(() => {
         if (em) {
             if (drawCanvasRef.current) {
@@ -217,6 +221,7 @@ export default function () {
         }
     }, [em, resolutionScale, drawCanvasRef])
 
+    // Draw loop
     useEffect(() => {
         let stop = false
         const drawIfNotStopped = () => {
@@ -231,8 +236,7 @@ export default function () {
         return () => { stop = true }
     }, [drawStep])
 
-    
-
+    // Reset materials in the simulator
     const resetMaterials = useCallback(() => {
         if (em) {
             em.setSources([])
@@ -240,6 +244,7 @@ export default function () {
         }
     }, [em])
 
+    // Reset fields in the simulator
     const resetFields = useCallback(() => {
         if (em) {
             em.resetFields()
@@ -287,72 +292,70 @@ export default function () {
         setSideMenuCollapsed(false)
     }, [sideBar])
 
-    return (
-        <>
-            <FullscreenView>
-                <InteractiveCanvas activeBrush={activeBrush} activeBrushShape={activeBrushShape} canvasSize={canvasSize}
-                    conductivityBrushValue={conductivityBrushValue} drawCanvasRef={drawCanvasRef} em={em}
-                    gridSize={gridSize} materialBrushSize={materialBrushSize} mouseDownPos={mouseDownPos}
-                    permeabilityBrushValue={permeabilityBrushValue} permittivityBrushValue={permittivityBrushValue}
-                    setIsInputDown={setIsInputDown} setMousePosition={setMousePosition} snapInput={snapInput}
-                    windowSize={windowSize} windowToSimulationPoint={windowToSimulationPoint} />
+    return <>
+        <FullscreenView>
+            <InteractiveCanvas activeBrush={activeBrush} activeBrushShape={activeBrushShape} canvasSize={canvasSize}
+                conductivityBrushValue={conductivityBrushValue} drawCanvasRef={drawCanvasRef} em={em}
+                gridSize={gridSize} materialBrushSize={materialBrushSize} mouseDownPos={mouseDownPos}
+                permeabilityBrushValue={permeabilityBrushValue} permittivityBrushValue={permittivityBrushValue}
+                setIsInputDown={setIsInputDown} setMousePosition={setMousePosition} snapInput={snapInput}
+                windowSize={windowSize} windowToSimulationPoint={windowToSimulationPoint} />
 
-                <BrushCursor mousePosition={mousePosition} activeBrushSize={activeBrushSize} brushShape={activeBrushShape} />
+            <BrushCursor mousePosition={mousePosition} activeBrushSize={activeBrushSize} brushShape={activeBrushShape} />
 
-                <MiscButtons extraStyle={hideWhenInputDownStyle} generateShareUrl={generateShareUrl}
-                    infoVisible={infoVisible} setInfoVisible={setInfoVisible}
-                    shareVisible={shareVisible} setShareVisible={setShareVisible} />
-                <BrushSelectionButtons activeSideBar={sideBar} setActiveSideBar={setSideBar} setActiveBrush={setActiveBrush} extraStyle={hideWhenInputDownStyle} />
-                <MenuSelectionButtons activeSideBar={sideBar} setActiveSideBar={setSideBar} extraStyle={hideWhenInputDownStyle} />
-                <ResetButtons resetFields={resetFields} resetMaterials={resetMaterials} extraStyle={hideWhenInputDownStyle} />
+            <MiscButtons extraStyle={hideWhenInputDownStyle} generateShareUrl={generateShareUrl}
+                infoVisible={infoVisible} setInfoVisible={setInfoVisible}
+                shareVisible={shareVisible} setShareVisible={setShareVisible} />
+            <BrushSelectionButtons activeSideBar={sideBar} setActiveSideBar={setSideBar} setActiveBrush={setActiveBrush} extraStyle={hideWhenInputDownStyle} />
+            <MenuSelectionButtons activeSideBar={sideBar} setActiveSideBar={setSideBar} extraStyle={hideWhenInputDownStyle} />
+            <ResetButtons resetFields={resetFields} resetMaterials={resetMaterials} extraStyle={hideWhenInputDownStyle} />
 
-                <CollapsibleContainer collapsed={sideMenuCollapsed} setCollapsed={setSideMenuCollapsed} title={sideBar.toString()}
-                    style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
-                    <MultiMenu activeState={sideBar}>
-                        <MultiMenuChild activateForState={SideBarType.SignalBrush}>
-                            <SignalBrushMenu
-                                signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
-                                signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
-                                signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
-                                activeBrushShape={activeBrushShape} setActiveBrushDrawShape={setActiveBrushDrawShape}
-                                snapInput={snapInput} setSnapInput={setSnapInput} />
-                        </MultiMenuChild>
+            <CollapsibleContainer collapsed={sideMenuCollapsed} setCollapsed={setSideMenuCollapsed} title={sideBar.toString()}
+                style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
+                <MultiMenu activeState={sideBar}>
+                    <MultiMenuChild activateForState={SideBarType.SignalBrush}>
+                        <SignalBrushMenu
+                            signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
+                            signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
+                            signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
+                            activeBrushShape={activeBrushShape} setActiveBrushDrawShape={setActiveBrushDrawShape}
+                            snapInput={snapInput} setSnapInput={setSnapInput} />
+                    </MultiMenuChild>
 
-                        <MultiMenuChild activateForState={SideBarType.MaterialBrush}>
-                            <MaterialBrushMenu
-                                materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
-                                permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
-                                permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
-                                conductivityBrushValue={conductivityBrushValue} setConductivityBrushValue={setConductivityBrushValue}
-                                activeBrushShape={activeBrushShape} setActiveBrushDrawShape={setActiveBrushDrawShape}
-                                snapInput={snapInput} setSnapInput={setSnapInput} />
-                        </MultiMenuChild>
+                    <MultiMenuChild activateForState={SideBarType.MaterialBrush}>
+                        <MaterialBrushMenu
+                            materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
+                            permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
+                            permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
+                            conductivityBrushValue={conductivityBrushValue} setConductivityBrushValue={setConductivityBrushValue}
+                            activeBrushShape={activeBrushShape} setActiveBrushDrawShape={setActiveBrushDrawShape}
+                            snapInput={snapInput} setSnapInput={setSnapInput} />
+                    </MultiMenuChild>
 
-                        <MultiMenuChild activateForState={SideBarType.Settings}>
-                            <SettingsComponent
-                                gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                                simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
-                                resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
-                                cellSize={cellSize} setCellSize={setCellSize}
-                                reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
-                                dt={dt} setDt={setDt}
-                                qualityPresets={qualityPresets} />
-                        </MultiMenuChild>
+                    <MultiMenuChild activateForState={SideBarType.Settings}>
+                        <SettingsComponent
+                            gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                            simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                            resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
+                            cellSize={cellSize} setCellSize={setCellSize}
+                            reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
+                            dt={dt} setDt={setDt}
+                            qualityPresets={qualityPresets} />
+                    </MultiMenuChild>
 
-                        <MultiMenuChild activateForState={SideBarType.Examples}>
-                            <ExamplesComponent
-                                em={em} setCellSize={setCellSize} setDt={setDt}
-                                setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                                gridSize={gridSize} dt={dt}
-                                cellSize={cellSize} simulationSpeed={simulationSpeed} />
-                        </MultiMenuChild>
-                    </MultiMenu>
-                </CollapsibleContainer>
-            </FullscreenView>
+                    <MultiMenuChild activateForState={SideBarType.Examples}>
+                        <ExamplesComponent
+                            em={em} setCellSize={setCellSize} setDt={setDt}
+                            setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
+                            gridSize={gridSize} dt={dt}
+                            cellSize={cellSize} simulationSpeed={simulationSpeed} />
+                    </MultiMenuChild>
+                </MultiMenu>
+            </CollapsibleContainer>
+        </FullscreenView>
 
-            <ShareBox visible={shareVisible} setVisible={setShareVisible} shareUrl={shareUrl} shareInProgress={shareInProgress} />
-            <LoadingIndicator visible={(shareVisible && (shareInProgress || !shareUrl)) || showLoading} />
-            <InfoBox visible={infoVisible} setVisible={setInfoVisible} />
-        </>
-    )
+        <ShareBox visible={shareVisible} setVisible={setShareVisible} shareUrl={shareUrl} shareInProgress={shareInProgress} />
+        <LoadingIndicator visible={(shareVisible && (shareInProgress || !shareUrl)) || showLoading} />
+        <InfoBox visible={infoVisible} setVisible={setInfoVisible} />
+    </>
 }
