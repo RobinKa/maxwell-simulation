@@ -1,6 +1,6 @@
 import { Regl, Framebuffer2D, DrawCommand } from "regl"
 import * as k from "./kernels/simulation"
-import { DrawInfo } from "./drawing"
+import { DrawInfo, DrawShape } from "./drawing"
 
 export type MaterialType = "permittivity" | "permeability" | "conductivity"
 
@@ -21,9 +21,9 @@ export function combineMaterialMaps(permittivity: number[][],
 
         for (let x = 0; x < width; x++) {
             row.push([
-                clamp(0, 255, 128 + 10 * permittivity[y][x]),
-                clamp(0, 255, 128 + 10 * permeability[y][x]),
-                clamp(0, 255, 128 + 10 * conductivity[y][x]),
+                clamp(0, 255, 128 + 4 * permittivity[y][x]),
+                clamp(0, 255, 128 + 4 * permeability[y][x]),
+                clamp(0, 255, 128 + 4 * conductivity[y][x]),
             ])
         }
 
@@ -318,19 +318,21 @@ export class FDTDSimulator implements Simulator {
         })
 
         this.drawOnTexture = {
-            "circle": makeFragWithFboPropFn(k.drawCircle, {
+            [DrawShape.Ellipse]: makeFragWithFboPropFn(k.drawCircle, {
                 texture: (_: any, props: any) => props.texture,
                 pos: (_: any, props: any) => props.pos,
                 value: (_: any, props: any) => props.value,
                 radius: (_: any, props: any) => props.radius,
                 keep: (_: any, props: any) => props.keep,
+                gridSize: () => this.gridSize,
             }),
-            "square": makeFragWithFboPropFn(k.drawSquare, {
+            [DrawShape.Square]: makeFragWithFboPropFn(k.drawSquare, {
                 texture: (_: any, props: any) => props.texture,
                 pos: (_: any, props: any) => props.pos,
                 value: (_: any, props: any) => props.value,
                 size: (_: any, props: any) => props.size,
                 keep: (_: any, props: any) => props.keep,
+                gridSize: () => this.gridSize,
             }),
         }
 
@@ -480,12 +482,13 @@ export class FDTDSimulator implements Simulator {
             value: value,
             keep: keep,
             texture: this.data.material.previous,
-            fbo: this.data.material.current
+            fbo: this.data.material.current,
+            gridSize: this.gridSize
         }
 
-        if (drawInfo.drawShape === "circle") {
+        if (drawInfo.drawShape === DrawShape.Ellipse) {
             uniforms.radius = drawInfo.radius
-        } else if (drawInfo.drawShape === "square") {
+        } else if (drawInfo.drawShape === DrawShape.Square) {
             uniforms.size = drawInfo.halfSize
         }
 
@@ -505,9 +508,9 @@ export class FDTDSimulator implements Simulator {
             fbo: this.data.electricSourceField.current
         }
 
-        if (drawInfo.drawShape === "circle") {
+        if (drawInfo.drawShape === DrawShape.Ellipse) {
             uniforms.radius = drawInfo.radius
-        } else if (drawInfo.drawShape === "square") {
+        } else if (drawInfo.drawShape === DrawShape.Square) {
             uniforms.size = drawInfo.halfSize
         }
 
@@ -571,9 +574,9 @@ export class FDTDSimulator implements Simulator {
             const row: number[][] = []
             for (let x = 0; x < this.gridSize[0]; x++) {
                 row.push([
-                    0.1 * (materialData[y * this.gridSize[0] * 4 + x * 4 + 0] - 127),
-                    0.1 * (materialData[y * this.gridSize[0] * 4 + x * 4 + 1] - 127),
-                    0.1 * (materialData[y * this.gridSize[0] * 4 + x * 4 + 2] - 127),
+                    (materialData[y * this.gridSize[0] * 4 + x * 4 + 0] - 127) / 4,
+                    (materialData[y * this.gridSize[0] * 4 + x * 4 + 1] - 127) / 4,
+                    (materialData[y * this.gridSize[0] * 4 + x * 4 + 2] - 127) / 4,
                     // +3 is unused
                 ])
             }

@@ -1,7 +1,7 @@
 import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect, MouseEventHandler } from "react"
 import { SimulatorMap, SimulationSettings } from "./em/serialization"
 import { EMState } from "./em"
-import { DrawShape, makeDrawSquareInfo, makeDrawCircleInfo } from "./em/drawing"
+import { DrawShape, makeDrawSquareInfo, makeDrawEllipseInfo } from "./em/drawing"
 import { PointSignalSource } from "./em/sources"
 import * as maps from "./em/maps"
 import { QualityPreset, toggleFullScreen } from "./util"
@@ -327,10 +327,10 @@ export type MaterialBrushMenuProps = {
 export function MaterialBrushMenu(props: MaterialBrushMenuProps) {
     const { activeBrushShape, setActiveBrushDrawShape } = props
 
-    const brushShapeIndex = useMemo(() => activeBrushShape === "square" ? 0 : 1, [activeBrushShape])
-    const setBrushShapeIndex = useCallback((index: number) => setActiveBrushDrawShape(index === 0 ? "square" : "circle"), [setActiveBrushDrawShape])
+    const brushShapeIndex = useMemo(() => activeBrushShape === DrawShape.Square ? 0 : 1, [activeBrushShape])
+    const setBrushShapeIndex = useCallback((index: number) => setActiveBrushDrawShape(index === 0 ? DrawShape.Square : DrawShape.Ellipse), [setActiveBrushDrawShape])
 
-    const brushSizeLabel = useMemo(() => activeBrushShape === "square" ? "Brush size" : "Brush radius", [activeBrushShape])
+    const brushSizeLabel = useMemo(() => activeBrushShape === DrawShape.Square ? "Brush size" : "Brush radius", [activeBrushShape])
 
     return (
         <div style={{ padding: "10px" }}>
@@ -372,10 +372,10 @@ export type SignalBrushMenuProps = {
 export function SignalBrushMenu(props: SignalBrushMenuProps) {
     const { activeBrushShape, setActiveBrushDrawShape } = props
 
-    const brushShapeIndex = useMemo(() => activeBrushShape === "square" ? 0 : 1, [activeBrushShape])
-    const setBrushShapeIndex = useCallback((index: number) => setActiveBrushDrawShape(index === 0 ? "square" : "circle"), [setActiveBrushDrawShape])
+    const brushShapeIndex = useMemo(() => activeBrushShape === DrawShape.Square ? 0 : 1, [activeBrushShape])
+    const setBrushShapeIndex = useCallback((index: number) => setActiveBrushDrawShape(index === 0 ? DrawShape.Square : DrawShape.Ellipse), [setActiveBrushDrawShape])
 
-    const brushSizeLabel = useMemo(() => activeBrushShape === "square" ? "Brush size" : "Brush radius", [activeBrushShape])
+    const brushSizeLabel = useMemo(() => activeBrushShape === DrawShape.Square ? "Brush size" : "Brush radius", [activeBrushShape])
 
     return (
         <div style={{ padding: "10px" }}>
@@ -560,7 +560,7 @@ export function BrushCursor(props: BrushCursorProps) {
                 border: "2px solid rgb(255, 89, 0)"
             }
 
-            if (props.brushShape === "circle") {
+            if (props.brushShape === DrawShape.Ellipse) {
                 style.borderRadius = "50%"
             }
 
@@ -624,19 +624,22 @@ export function InteractiveCanvas(props: InteractiveCanvasProps) {
     const changeMaterial = useCallback((canvasPos: [number, number]) => {
         if (em) {
             const center: [number, number] = windowToSimulationPoint(canvasPos)
-            const brushHalfSize = materialBrushSize / gridSize[1] / 2
+            const brushHalfSize: [number, number] = [
+                materialBrushSize / gridSize[0] / 2,
+                materialBrushSize / gridSize[1] / 2
+            ]
 
-            em.drawMaterial("permittivity", activeBrushShape === "square" ?
+            em.drawMaterial("permittivity", activeBrushShape === DrawShape.Square ?
                 makeDrawSquareInfo(center, brushHalfSize, permittivityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, permittivityBrushValue))
+                makeDrawEllipseInfo(center, brushHalfSize, permittivityBrushValue))
 
-            em.drawMaterial("permeability", activeBrushShape === "square" ?
+            em.drawMaterial("permeability", activeBrushShape === DrawShape.Square ?
                 makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
+                makeDrawEllipseInfo(center, brushHalfSize, permeabilityBrushValue))
 
-            em.drawMaterial("conductivity", activeBrushShape === "square" ?
+            em.drawMaterial("conductivity", activeBrushShape === DrawShape.Square ?
                 makeDrawSquareInfo(center, brushHalfSize, conductivityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, conductivityBrushValue))
+                makeDrawEllipseInfo(center, brushHalfSize, conductivityBrushValue))
         }
     }, [em, gridSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, activeBrushShape, windowToSimulationPoint])
 

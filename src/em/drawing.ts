@@ -1,4 +1,7 @@
-export type DrawShape = "square" | "circle"
+export enum DrawShape {
+    Square = "square",
+    Ellipse = "ellipse",
+}
 
 type BaseDrawInfo = {
     drawShape: DrawShape
@@ -7,27 +10,27 @@ type BaseDrawInfo = {
 }
 
 type DrawSquareInfo = {
-    drawShape: "square"
-    halfSize: number
+    drawShape: DrawShape.Square
+    halfSize: [number, number]
 } & BaseDrawInfo
 
 type DrawCircleInfo = {
-    drawShape: "circle"
-    radius: number
+    drawShape: DrawShape.Ellipse
+    radius: [number, number]
 } & BaseDrawInfo
 
-export function makeDrawSquareInfo(center: [number, number], halfSize: number, value: number): DrawSquareInfo {
+export function makeDrawSquareInfo(center: [number, number], halfSize: [number, number], value: number): DrawSquareInfo {
     return {
-        drawShape: "square",
+        drawShape: DrawShape.Square,
         center,
         halfSize: halfSize,
         value
     }
 }
 
-export function makeDrawCircleInfo(center: [number, number], radius: number, value: number): DrawCircleInfo {
+export function makeDrawEllipseInfo(center: [number, number], radius: [number, number], value: number): DrawCircleInfo {
     return {
-        drawShape: "circle",
+        drawShape: DrawShape.Ellipse,
         center,
         radius,
         value

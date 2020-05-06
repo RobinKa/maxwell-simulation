@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { EMState, createEM } from "./em"
-import { makeDrawSquareInfo, makeDrawCircleInfo, DrawShape } from "./em/drawing"
+import { makeDrawSquareInfo, makeDrawEllipseInfo, DrawShape } from "./em/drawing"
 import { signalSourceToDescriptor, descriptorToSignalSource, makeMaterialMap } from './em/serialization'
 import {
     SideBarType, BrushType, CollapsibleContainer, SettingsComponent, ExamplesComponent,
@@ -20,7 +20,7 @@ const defaultPermittivityBrushValue = 5
 const defaultPermeabilityBrushValue = 1
 const defaultConductivityBrushValue = 0
 const defaultMaterialBrushSize = 5
-const defaultBrushDrawShape = "square"
+const defaultBrushDrawShape = DrawShape.Square
 
 const initialDt = defaultPreset.dt
 const initialCellSize = defaultPreset.cellSize
@@ -175,6 +175,7 @@ export default function () {
                 clamp(0, 1, windowPoint[0] / windowSize[0]),
                 clamp(0, 1, 1 - windowPoint[1] / windowSize[1])
             ]
+
             return simulationPoint
         }
     }, [windowSize])
@@ -184,12 +185,16 @@ export default function () {
         if (em) {
             if (mouseDownPos.current !== null) {
                 const center: [number, number] = windowToSimulationPoint(mouseDownPos.current)
-                const brushHalfSize = signalBrushSize / gridSize[1] / 2
+                const brushHalfSize: [number, number] = [
+                    signalBrushSize / gridSize[0] / 2,
+                    signalBrushSize / gridSize[1] / 2
+                ]
+
                 const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * em.getTime())
 
-                const drawInfo = activeBrushShape === "square" ?
+                const drawInfo = activeBrushShape === DrawShape.Square ?
                     makeDrawSquareInfo(center, brushHalfSize, value) :
-                    makeDrawCircleInfo(center, brushHalfSize, value)
+                    makeDrawEllipseInfo(center, brushHalfSize, value)
 
                 em.injectSignal(drawInfo, dt)
             }

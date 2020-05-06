@@ -171,15 +171,27 @@ export const drawSquare = `
     uniform sampler2D texture;
     uniform vec2 pos;
     uniform vec4 value;
-    uniform float size;
+    uniform vec2 size;
     uniform vec4 keep;
+    uniform vec2 gridSize;
 
     varying vec2 uv;
 
     void main() {
-        vec2 d = abs(pos.xy - uv.xy);
+        // Snap to grid. Round up or down correctly.
+        vec2 relativeCellSize = 1.0 / gridSize;
+        vec2 residual = mod(pos, relativeCellSize);
+        vec2 gridPos = pos - residual;
+        if (residual.x > 0.5 * relativeCellSize.x) {
+            gridPos.x += relativeCellSize.x;
+        }
+        if (residual.y > 0.5 * relativeCellSize.y) {
+            gridPos.y += relativeCellSize.y;
+        }
+
+        vec2 d = abs(gridPos.xy - uv.xy);
         vec4 oldValue = texture2D(texture, uv);
-        bool within = max(d.x, d.y) < size;
+        bool within = all(lessThanEqual(d, size));
 
         gl_FragColor = within ? value + keep * oldValue : oldValue;
     }
@@ -191,15 +203,39 @@ export const drawCircle = `
     uniform sampler2D texture;
     uniform vec2 pos;
     uniform vec4 value;
-    uniform float radius;
+    uniform vec2 radius;
     uniform vec4 keep;
+    uniform vec2 gridSize;
 
     varying vec2 uv;
 
     void main() {
-        vec2 d = pos.xy - uv.xy;
+        // Snap to grid. Round up or down correctly.
+        vec2 relativeCellSize = 1.0 / gridSize;
+        vec2 residual = mod(pos, relativeCellSize);
+        vec2 gridPos = pos - residual;
+        if (residual.x > 0.5 * relativeCellSize.x) {
+            gridPos.x += relativeCellSize.x;
+        }
+        if (residual.y > 0.5 * relativeCellSize.y) {
+            gridPos.y += relativeCellSize.y;
+        }
+
+        // Calculate distance squared
+        vec2 d = gridPos.xy - uv.xy;
+
+        // Check if distance is within ellipse
+        d = d / radius;
+        d = d * d;
+
+        // In a perfect world we'd just use 1 here to check if the point is within
+        // an ellipse. However it seems like half-float accuracies are not good
+        // enough when the radius is at its lowest (ie. half a cell size) so use a bigger
+        // number for that case.
+        float c = radius[0] < 1.0 / gridSize[0] || radius[1] < 1.0 / gridSize[1] ? 2.0 : 1.0;
+        bool within = d.x + d.y <= c;
+        
         vec4 oldValue = texture2D(texture, uv);
-        bool within = d.x * d.x + d.y * d.y < radius * radius;
 
         gl_FragColor = within ? value + keep * oldValue : oldValue;
     }
@@ -223,7 +259,7 @@ export const copyUint8ToFloat16 = `
     varying vec2 uv;
 
     void main() {
-        gl_FragColor = 0.1 * (-128.0 + 256.0 * texture2D(texture, uv));
+        gl_FragColor = (-128.0 + 256.0 * texture2D(texture, uv)) / 4.0;
     }
 `
 
@@ -235,6 +271,6 @@ export const copyFloat16ToUint8 = `
     varying vec2 uv;
 
     void main() {
-        gl_FragColor = (128.0 + 10.0 * texture2D(texture, uv)) / 256.0;
+        gl_FragColor = (128.0 + 4.0 * texture2D(texture, uv)) / 256.0;
     }
 `
