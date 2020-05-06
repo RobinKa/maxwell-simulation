@@ -3,21 +3,24 @@ export const renderEnergy = `
 
     uniform sampler2D electricField;
     uniform sampler2D magneticField;
+    uniform sampler2D material;
     uniform float brightness;
+    uniform float electricEnergyFactor;
+    uniform float magneticEnergyFactor;
 
     varying vec2 uv;
 
     void main() {
         vec3 el = texture2D(electricField, uv).rgb;
         vec3 mag = texture2D(magneticField, uv).rgb;
+        vec2 mat = texture2D(material, uv).rg;
         float brightnessSquared = brightness * brightness;
 
         vec2 energy = vec2(
-            dot(el, el),
-            dot(mag, mag)
+            electricEnergyFactor * mat.x * dot(el, el),
+            magneticEnergyFactor * mat.y * dot(mag, mag)
         );
 
-        //gl_FragColor = vec4(uv.y * 1.0, sin(500.0 * uv.x) * 1.0, 0.0, 0.0);
         gl_FragColor = vec4(brightnessSquared * energy, 0.0, 0.0);
     }
 `

@@ -1,9 +1,10 @@
 import React, { ReactElement, useState, useCallback, useMemo, useRef, useEffect, MouseEventHandler } from "react"
-import { SimulatorMap, SimulationSettings } from "./serialization"
-import { FDTDSimulator, DrawShapeType } from "./simulator"
-import { SignalSource, PointSignalSource } from "./sources"
-import * as maps from "./maps"
-import { QualityPreset, combineMaterialMaps } from "./util"
+import { SimulatorMap, SimulationSettings } from "./em/serialization"
+import { EMState } from "./em"
+import { DrawShapeType } from "./em/drawing"
+import { PointSignalSource } from "./em/sources"
+import * as maps from "./em/maps"
+import { QualityPreset } from "./util"
 
 export type CollapsibleContainerProps = {
     children?: ReactElement<any> | ReactElement<any>[]
@@ -117,7 +118,7 @@ export function OptionSelector(props: OptionSelectorProps) {
 }
 
 export type ExamplesComponentProps = {
-    simulator: FDTDSimulator | null
+    em: EMState | null
 
     dt: number
     simulationSpeed: number
@@ -128,36 +129,35 @@ export type ExamplesComponentProps = {
     setDt: (dt: number) => void
     setCellSize: (cellSize: number) => void
     setSimulationSpeed: (simulationSpeed: number) => void
-    setSources: (sources: SignalSource[]) => void
 }
 
 export function ExamplesComponent(props: ExamplesComponentProps) {
-    const { simulator, setGridSizeLongest, setDt, setCellSize, setSimulationSpeed, setSources } = props
+    const { em, setGridSizeLongest, setDt, setCellSize, setSimulationSpeed } = props
 
     const loadMap = useCallback((simulatorMap: SimulatorMap) => {
-        if (simulator) {
-            simulator.resetFields()
-            simulator.loadMaterial(combineMaterialMaps(
+        if (em) {
+            em.resetFields()
+            em.loadMaterialFromComponents(
                 simulatorMap.materialMap.permittivity,
                 simulatorMap.materialMap.permeability,
                 simulatorMap.materialMap.conductivity
-            ))
+            )
+
+            const loadedSources = simulatorMap.sourceDescriptors.map(desc => {
+                if (desc.type === "point") {
+                    return new PointSignalSource(desc.amplitude, desc.frequency, desc.position, desc.turnOffTime)
+                }
+
+                throw new Error(`Unsupported source type: ${desc.type}`)
+            })
+
+            setCellSize(simulatorMap.simulationSettings.cellSize)
+            setDt(simulatorMap.simulationSettings.dt)
+            setSimulationSpeed(simulatorMap.simulationSettings.simulationSpeed)
+            setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
+            em.setSources(loadedSources)
         }
-
-        const loadedSources = simulatorMap.sourceDescriptors.map(desc => {
-            if (desc.type === "point") {
-                return new PointSignalSource(desc.amplitude, desc.frequency, desc.position, desc.turnOffTime)
-            }
-
-            throw new Error(`Unsupported source type: ${desc.type}`)
-        })
-
-        setCellSize(simulatorMap.simulationSettings.cellSize)
-        setDt(simulatorMap.simulationSettings.dt)
-        setSimulationSpeed(simulatorMap.simulationSettings.simulationSpeed)
-        setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
-        setSources(loadedSources)
-    }, [simulator, setCellSize, setDt, setSimulationSpeed, setGridSizeLongest, setSources])
+    }, [em, setCellSize, setDt, setSimulationSpeed, setGridSizeLongest])
 
     const simulationSettings = useMemo<SimulationSettings>(() => {
         return {

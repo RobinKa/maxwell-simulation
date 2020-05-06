@@ -10,34 +10,36 @@ export function clamp(min: number, max: number, value: number) {
     return Math.max(min, Math.min(max, value))
 }
 
-export function combineMaterialMaps(permittivity: number[][],
-    permeability: number[][], conductivity: number[][]): number[][][] {
-    const material: number[][][] = [];
-    const width = permittivity[0].length;
-    const height = permittivity.length;
-
-    // TODO: Verify same dims
-
-    for (let y = 0; y < height; y++) {
-        const row: number[][] = []
-        
-        for (let x = 0; x < width; x++) {
-            row.push([
-                clamp(0, 255, 128 + 10*permittivity[y][x]),
-                clamp(0, 255, 128 + 10*permeability[y][x]),
-                clamp(0, 255, 128 + 10*conductivity[y][x]),
-            ])
-        }
-
-        material.push(row)
-    }
-
-    return material
-}
-
 export type QualityPreset = {
     dt: number
     cellSize: number
     gridSizeLongest: number
     resolutionScale: number
+}
+
+export const qualityPresets: { [presetName: string]: QualityPreset } = {
+    "Low": {
+        dt: 0.013 * 2,
+        cellSize: 0.02 * 2,
+        resolutionScale: 0.3,
+        gridSizeLongest: 400 / 2
+    },
+    "Medium": {
+        dt: 0.013,
+        cellSize: 0.02,
+        resolutionScale: 1,
+        gridSizeLongest: 400
+    },
+    "High": {
+        dt: 0.013 / 2,
+        cellSize: 0.02 / 2,
+        resolutionScale: 1,
+        gridSizeLongest: 400 * 2
+    },
+    "Ultra": {
+        dt: 0.013 / 4,
+        cellSize: 0.02 / 4,
+        resolutionScale: 1,
+        gridSizeLongest: 400 * 4
+    }
 }

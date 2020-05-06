@@ -1,4 +1,4 @@
-import { EncodedSimulatorMap, decodeSimulatorMap, SimulatorMap, encodeSimulatorMap } from "./serialization"
+import { EncodedSimulatorMap, decodeSimulatorMap, SimulatorMap, encodeSimulatorMap } from "./em/serialization"
 
 const apiUrl = "https://6xuthl3lv4.execute-api.us-east-1.amazonaws.com/live/share"
 

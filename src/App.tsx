@@ -1,48 +1,18 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { FDTDSimulator, makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./simulator"
+import { EMState, createEM } from "./em"
+import { makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./em/drawing"
+import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from './em/serialization'
 import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
-import { toggleFullScreen, clamp, QualityPreset, combineMaterialMaps } from './util'
+import { toggleFullScreen, clamp, qualityPresets } from './util'
 import * as Icon from "./icons"
-import "./App.css"
-import { SignalSource } from './sources'
-import * as k from './kernels/rendering'
 import { getSharedSimulatorMap, shareSimulatorMap } from './share'
-import { MaterialMap, signalSourceToDescriptor, descriptorToSignalSource } from './serialization'
 import { BounceLoader } from "react-spinners"
-import REGL, { Regl, Framebuffer2D } from 'regl'
 
 enum SideBarType {
     SignalBrush = "Signal Brush",
     MaterialBrush = "Material Brush",
     Settings = "Settings",
     Examples = "Examples"
-}
-
-const qualityPresets: { [presetName: string]: QualityPreset } = {
-    "Low": {
-        dt: 0.013 * 2,
-        cellSize: 0.02 * 2,
-        resolutionScale: 0.3,
-        gridSizeLongest: 400 / 2
-    },
-    "Medium": {
-        dt: 0.013,
-        cellSize: 0.02,
-        resolutionScale: 1,
-        gridSizeLongest: 400
-    },
-    "High": {
-        dt: 0.013 / 2,
-        cellSize: 0.02 / 2,
-        resolutionScale: 1,
-        gridSizeLongest: 400 * 2
-    },
-    "Ultra": {
-        dt: 0.013 / 4,
-        cellSize: 0.02 / 4,
-        resolutionScale: 1,
-        gridSizeLongest: 400 * 4
-    }
 }
 
 const defaultPreset = qualityPresets["Medium"]
@@ -78,206 +48,6 @@ function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]
         [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
 }
 
-const makeRenderSimulatorCanvas = (regl: Regl, canvasSize: [number, number]) => {
-    const filter = regl.hasExtension("OES_texture_half_float_linear") ? "linear" : "nearest"
-
-    const frameBuffers: Framebuffer2D[] = []
-
-    const makeFrameBuffer = () => {
-        // Create half-precision texture at canvas size
-        const fbo = regl.framebuffer({
-            color: regl.texture({
-                width: canvasSize[0],
-                height: canvasSize[1],
-                wrap: "clamp",
-                type: "float16",
-                format: "rgba",
-                min: filter,
-                mag: filter
-            }),
-            depthStencil: false
-        })
-
-        // Keep track of all frame buffers so we can
-        // resize them when the canvas size changes.
-        frameBuffers.push(fbo)
-
-        return fbo
-    }
-
-    const fbos = [makeFrameBuffer(), makeFrameBuffer()]
-    const energyFbo = makeFrameBuffer()
-
-    type RenderEnergyUniforms = {
-        brightness: number
-        electricField: Framebuffer2D
-        magneticField: Framebuffer2D
-    }
-
-    type RenderEnergyAttributes = {
-        position: number[][]
-    }
-
-    const renderEnergy = regl<RenderEnergyUniforms, RenderEnergyAttributes, RenderEnergyUniforms>({
-        frag: k.renderEnergy,
-        framebuffer: energyFbo,
-        uniforms: {
-            brightness: (_, { brightness }) => brightness,
-            electricField: (_, { electricField }) => electricField,
-            magneticField: (_, { magneticField }) => magneticField,
-        },
-
-        attributes: {
-            position: [
-                [1, -1],
-                [1, 1],
-                [-1, -1],
-                [-1, 1]
-            ]
-        },
-        vert: k.vertDraw,
-        count: 4,
-        primitive: "triangle strip",
-        depth: { enable: false }
-    })
-
-    type BloomExtractUniforms = {
-        texture: Framebuffer2D
-        threshold: number
-    }
-
-    const bloomExtract = regl<BloomExtractUniforms, {}, BloomExtractUniforms>({
-        frag: k.bloomExtract,
-        framebuffer: fbos[0],
-        uniforms: {
-            texture: () => energyFbo,
-            threshold: (_, { threshold }) => threshold,
-        },
-
-        attributes: {
-            position: [
-                [1, -1],
-                [1, 1],
-                [-1, -1],
-                [-1, 1]
-            ]
-        },
-        vert: k.vertDraw,
-        count: 4,
-        primitive: "triangle strip",
-        depth: { enable: false }
-    })
-
-    const blurVert = regl<{ texture: Framebuffer2D, direction: [number, number] }, {}, { texture: Framebuffer2D }>({
-        frag: k.blurDirectional,
-        framebuffer: fbos[1],
-        uniforms: {
-            texture: (_, { texture }) => texture,
-            direction: ctx => [1 / ctx.drawingBufferHeight, 0]
-        },
-
-        attributes: {
-            position: [
-                [1, -1],
-                [1, 1],
-                [-1, -1],
-                [-1, 1]
-            ]
-        },
-        vert: k.vertDraw,
-        count: 4,
-        primitive: "triangle strip",
-        depth: { enable: false }
-    })
-
-    const blurHor = regl({
-        frag: k.blurDirectional,
-        framebuffer: fbos[0],
-        uniforms: {
-            texture: fbos[1],
-            direction: ctx => [0, 1 / ctx.drawingBufferHeight]
-        },
-
-        attributes: {
-            position: [
-                [1, -1],
-                [1, 1],
-                [-1, -1],
-                [-1, 1]
-            ]
-        },
-        vert: k.vertDraw,
-        count: 4,
-        primitive: "triangle strip",
-        depth: { enable: false }
-    })
-
-    type DrawUniforms = {
-        energyTexture: Framebuffer2D
-        bloomTexture: Framebuffer2D
-        materialTexture: Framebuffer2D
-        gridSize: [number, number]
-    }
-
-    const draw = regl<DrawUniforms, {}, DrawUniforms>({
-        frag: k.draw,
-        uniforms: {
-            energyTexture: (_, { energyTexture }) => energyTexture,
-            bloomTexture: (_, { bloomTexture }) => bloomTexture,
-            materialTexture: (_, { materialTexture }) => materialTexture,
-            gridSize: (_, { gridSize }) => gridSize,
-        },
-
-        attributes: {
-            position: [
-                [1, -1],
-                [1, 1],
-                [-1, -1],
-                [-1, 1]
-            ]
-        },
-        vert: k.vertDraw,
-        count: 4,
-        primitive: "triangle strip",
-        depth: { enable: false }
-    })
-
-    function render(electricField: Framebuffer2D, magneticField: Framebuffer2D,
-        material: Framebuffer2D, cellSize: number, gridSize: [number, number]) {
-        renderEnergy({
-            brightness: 0.02 * 0.02 / (cellSize * cellSize),
-            electricField: electricField,
-            magneticField: magneticField
-        })
-
-        bloomExtract({
-            threshold: 1
-        })
-
-        const blurCount = 3
-        for (let i = 0; i < blurCount; i++) {
-            blurVert({
-                texture: i === 0 ? energyFbo : fbos[0]
-            })
-            blurHor()
-        }
-
-        draw({
-            energyTexture: energyFbo,
-            bloomTexture: fbos[0],
-            materialTexture: material,
-            gridSize: gridSize
-        })
-    }
-
-    return {
-        render: render,
-        adjustSize: (size: [number, number]) => {
-            frameBuffers.forEach(fbo => fbo.resize(size[0], size[1]))
-        }
-    }
-}
-
 export default function () {
     const urlShareId = window.location.hash ? window.location.hash.substr(1) : null
     const [shareId, setShareId] = useState<string | null>(urlShareId)
@@ -293,8 +63,18 @@ export default function () {
     const [simulationSpeed, setSimulationSpeed] = useState(initialSimulationSpeed)
     const [reflectiveBoundary, setReflectiveBoundary] = useState(initialReflectiveBoundary)
 
-    const [sources, setSources] = useState<SignalSource[]>([])
+    const gridSize = useMemo<[number, number]>(() => calculateGridSize(gridSizeLongest, canvasSize), [canvasSize, gridSizeLongest])
+    const [em, setEm] = useState<EMState | null>(null)
 
+    // Would use useMemo for gpu here, but useMemo does not seem to work with ref dependencies.
+    useEffect(() => {
+        if (drawCanvasRef.current) {
+            setEm(createEM(drawCanvasRef.current, initialGridSize,
+                initialCellSize, initialReflectiveBoundary, initialDt))
+        }
+    }, [drawCanvasRef])
+
+    // Window resize canvas
     useEffect(() => {
         const adjustCanvasSize = () => {
             const wndSize: [number, number] = [window.innerWidth, window.innerHeight]
@@ -308,43 +88,19 @@ export default function () {
         return () => window.removeEventListener("resize", adjustCanvasSize)
     }, [resolutionScale])
 
-    const gridSize = useMemo<[number, number]>(() => calculateGridSize(gridSizeLongest, canvasSize), [canvasSize, gridSizeLongest])
-
-    // Would use useMemo for gpu here, but useMemo does not seem to work with ref dependencies.
-    const [regl, setRegl] = useState<Regl | null>(null)
-    useEffect(() => {
-        if (drawCanvasRef.current) {
-            const regl = REGL({
-                canvas: drawCanvasRef.current,
-                extensions: [
-                    "OES_texture_half_float",
-                ],
-                optionalExtensions: [
-                    "OES_texture_half_float_linear"
-                ]
-            })
-
-            // Need to pass a lambda here because otherwise
-            // react will treat regl as a callable.
-            setRegl((prev: any) => regl)
-        }
-    }, [drawCanvasRef])
-
-    const simulator = useMemo(() => regl ? new FDTDSimulator(regl, initialGridSize, initialCellSize, initialReflectiveBoundary, initialDt) : null, [regl])
-    const renderSim = useMemo(() => regl ? makeRenderSimulatorCanvas(regl, initialGridSize) : null, [regl])
 
     // Load share id
     useEffect(() => {
-        if (simulator && urlShareId) {
+        if (em && urlShareId) {
             setShowLoading(true)
             console.log(`Loading ${urlShareId}`)
             getSharedSimulatorMap(urlShareId).then(simulatorMap => {
                 // Load material
-                simulator.loadMaterial(combineMaterialMaps(
+                em.loadMaterialFromComponents(
                     simulatorMap.materialMap.permittivity,
                     simulatorMap.materialMap.permeability,
                     simulatorMap.materialMap.conductivity
-                ))
+                )
 
                 // Load settings
                 setDt(simulatorMap.simulationSettings.dt)
@@ -352,40 +108,44 @@ export default function () {
                 setCellSize(simulatorMap.simulationSettings.cellSize)
 
                 // Load sources
-                setSources(simulatorMap.sourceDescriptors.map(desc => descriptorToSignalSource(desc)))
+                em.setSources(simulatorMap.sourceDescriptors.map(desc => descriptorToSignalSource(desc)))
 
                 console.log(`Loaded ${urlShareId}`)
             }).catch(err => console.error(`Error getting share ${urlShareId}: ${JSON.stringify(err)}`)).finally(() => setShowLoading(false))
         }
-    }, [simulator, urlShareId])
+    }, [em, urlShareId])
 
     // Update render sim output size
     useEffect(() => {
-        if (renderSim) {
-            renderSim.adjustSize(canvasSize)
+        if (em) {
+            em.adjustCanvasSize(canvasSize)
+            em.resetFields()
+            em.resetMaterials()
         }
-    }, [renderSim, canvasSize])
+    }, [em, canvasSize])
 
     // Update simulator grid size
     useEffect(() => {
-        if (simulator) {
-            simulator.setGridSize(gridSize)
+        if (em) {
+            em.setGridSize(gridSize)
+            em.resetFields()
+            em.resetMaterials()
         }
-    }, [simulator, gridSize])
+    }, [em, gridSize])
 
     // Update simulator cell size
     useEffect(() => {
-        if (simulator) {
-            simulator.setCellSize(cellSize)
+        if (em) {
+            em.setCellSize(cellSize)
         }
-    }, [simulator, cellSize])
+    }, [em, cellSize])
 
     // Update reflective boundary
     useEffect(() => {
-        if (simulator) {
-            simulator.reflectiveBoundary = reflectiveBoundary
+        if (em) {
+            em.setReflectiveBoundary(reflectiveBoundary)
         }
-    }, [simulator, reflectiveBoundary])
+    }, [em, reflectiveBoundary])
 
     const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
     const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
@@ -427,29 +187,22 @@ export default function () {
     }, [windowSize])
 
     const simStep = useCallback(() => {
-        if (simulator) {
-            const simData = simulator.getData()
-
+        if (em) {
             if (mouseDownPos.current !== null) {
                 const center: [number, number] = windowToSimulationPoint(mouseDownPos.current)
                 const brushHalfSize = signalBrushSize / gridSize[1] / 2
-                const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * simData.time)
+                const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * em.getTime())
 
                 const drawInfo = drawShapeType === "square" ?
                     makeDrawSquareInfo(center, brushHalfSize, value) :
                     makeDrawCircleInfo(center, brushHalfSize, value)
 
-                simulator.injectSignal(drawInfo, dt)
+                em.injectSignal(drawInfo, dt)
             }
 
-            for (const source of sources) {
-                source.inject(simulator, dt)
-            }
-
-            simulator.stepMagnetic(dt)
-            simulator.stepElectric(dt)
+            em.stepSim(dt)
         }
-    }, [simulator, dt, signalFrequency, signalBrushValue, signalBrushSize, sources, windowToSimulationPoint, drawShapeType, gridSize])
+    }, [em, dt, signalFrequency, signalBrushValue, signalBrushSize, windowToSimulationPoint, drawShapeType, gridSize])
 
     useEffect(() => {
         if (simulationSpeed > 0) {
@@ -460,28 +213,17 @@ export default function () {
         return undefined
     }, [simStep, dt, simulationSpeed])
 
-    useEffect(() => {
-        // TODO: Repaint existing material onto new canvas instead of resetting.
-        if (simulator !== null) {
-            simulator.resetFields()
-            simulator.resetMaterials()
-        }
-    }, [canvasSize, simulator])
-
     const drawStep = useCallback(() => {
-        if (simulator && renderSim) {
+        if (em) {
             if (drawCanvasRef.current) {
                 const cnvSize = calculateCanvasSize([window.innerWidth, window.innerHeight], resolutionScale)
                 drawCanvasRef.current.width = cnvSize[0]
                 drawCanvasRef.current.height = cnvSize[1]
             }
 
-            const simData = simulator.getData()
-
-            renderSim.render(simData.electricField.current, simData.magneticField.current,
-                simData.material.current, cellSize, gridSize)
+            em?.renderToCanvas(true, true)
         }
-    }, [simulator, renderSim, cellSize, gridSize, resolutionScale, drawCanvasRef])
+    }, [em, resolutionScale, drawCanvasRef])
 
     useEffect(() => {
         let stop = false
@@ -498,88 +240,83 @@ export default function () {
     }, [drawStep])
 
     const changeMaterial = useCallback((canvasPos: [number, number]) => {
-        if (simulator) {
+        if (em) {
             const center: [number, number] = windowToSimulationPoint(canvasPos)
             const brushHalfSize = materialBrushSize / gridSize[1] / 2
 
-            simulator.drawMaterial("permittivity", drawShapeType === "square" ?
+            em.drawMaterial("permittivity", drawShapeType === "square" ?
                 makeDrawSquareInfo(center, brushHalfSize, permittivityBrushValue) :
                 makeDrawCircleInfo(center, brushHalfSize, permittivityBrushValue))
 
-            simulator.drawMaterial("permeability", drawShapeType === "square" ?
+            em.drawMaterial("permeability", drawShapeType === "square" ?
                 makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
                 makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
 
-            simulator.drawMaterial("conductivity", drawShapeType === "square" ?
+            em.drawMaterial("conductivity", drawShapeType === "square" ?
                 makeDrawSquareInfo(center, brushHalfSize, conductivityBrushValue) :
                 makeDrawCircleInfo(center, brushHalfSize, conductivityBrushValue))
         }
-    }, [simulator, gridSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType, windowToSimulationPoint])
+    }, [em, gridSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType, windowToSimulationPoint])
 
     const resetMaterials = useCallback(() => {
-        if (simulator) {
-            setSources([])
-            simulator.resetMaterials()
+        if (em) {
+            em.setSources([])
+            em.resetMaterials()
         }
-    }, [simulator])
+    }, [em])
 
     const resetFields = useCallback(() => {
-        if (simulator) {
-            simulator.resetFields()
+        if (em) {
+            em.resetFields()
             signalStrength.current = 0
         }
-    }, [simulator])
+    }, [em])
 
     const [isInputDown, setIsInputDown] = useState(false)
 
     const onInputDown = useCallback((clientPos: [number, number]) => {
-        if (simulator) {
-            setInputStartPos(clientPos)
+        setInputStartPos(clientPos)
 
-            if (clickOption === optionSignal) {
-                mouseDownPos.current = clientPos
-            } else if (clickOption === optionMaterialBrush) {
-                changeMaterial(clientPos)
-                setDrawingMaterial(true)
-            }
-
+        if (clickOption === optionSignal) {
+            mouseDownPos.current = clientPos
+        } else if (clickOption === optionMaterialBrush) {
+            changeMaterial(clientPos)
+            setDrawingMaterial(true)
         }
 
         setIsInputDown(true)
-    }, [simulator, changeMaterial, clickOption])
+    }, [changeMaterial, clickOption])
 
     const onInputMove = useCallback((clientPos: [number, number], shiftDown?: boolean) => {
-        if (simulator) {
-            let pos: [number, number] = clientPos
+        let pos: [number, number] = clientPos
 
-            // If snapping, change the position to lie along the draw line
-            if ((snapInput || shiftDown) && inputStartPos) {
-                const offset = [pos[0] - inputStartPos[0], pos[1] - inputStartPos[1]]
-                if (inputDir) {
-                    const projection = offset[0] * inputDir[0] + offset[1] * inputDir[1]
-                    pos = [inputStartPos[0] + projection * inputDir[0], inputStartPos[1] + projection * inputDir[1]]
-                } else {
-                    const offsetLengthSq = offset[0] * offset[0] + offset[1] * offset[1]
-                    const minimumSnapLengthSq = 0.01 * 0.01 * (windowSize[0] * windowSize[0] + windowSize[1] * windowSize[1])
-                    if (offsetLengthSq > minimumSnapLengthSq) {
-                        // Snap to discrete angles
-                        const angleQuantum = Math.PI / 4
-                        const snappedAngle = Math.round(Math.atan2(offset[1], offset[0]) / angleQuantum) * angleQuantum
-                        const dir: [number, number] = [Math.cos(snappedAngle), Math.sin(snappedAngle)]
-                        setInputDir(dir)
-                    }
+        // If snapping, change the position to lie along the draw line
+        if ((snapInput || shiftDown) && inputStartPos) {
+            const offset = [pos[0] - inputStartPos[0], pos[1] - inputStartPos[1]]
+            if (inputDir) {
+                const projection = offset[0] * inputDir[0] + offset[1] * inputDir[1]
+                pos = [inputStartPos[0] + projection * inputDir[0], inputStartPos[1] + projection * inputDir[1]]
+            } else {
+                const offsetLengthSq = offset[0] * offset[0] + offset[1] * offset[1]
+                const minimumSnapLengthSq = 0.01 * 0.01 * (windowSize[0] * windowSize[0] + windowSize[1] * windowSize[1])
+                if (offsetLengthSq > minimumSnapLengthSq) {
+                    // Snap to discrete angles
+                    const angleQuantum = Math.PI / 4
+                    const snappedAngle = Math.round(Math.atan2(offset[1], offset[0]) / angleQuantum) * angleQuantum
+                    const dir: [number, number] = [Math.cos(snappedAngle), Math.sin(snappedAngle)]
+                    setInputDir(dir)
                 }
             }
-
-            if (clickOption === optionSignal && mouseDownPos.current !== null) {
-                mouseDownPos.current = pos
-            }
-
-            if (drawingMaterial) {
-                changeMaterial(pos)
-            }
         }
-    }, [simulator, changeMaterial, clickOption, drawingMaterial, inputDir, inputStartPos, windowSize, snapInput])
+
+        if (clickOption === optionSignal && mouseDownPos.current !== null) {
+            mouseDownPos.current = pos
+        }
+
+        if (drawingMaterial) {
+            changeMaterial(pos)
+        }
+    }, [changeMaterial, clickOption, drawingMaterial, inputDir, inputStartPos, windowSize, snapInput])
 
     const onInputUp = useCallback(() => {
         if (clickOption === optionSignal) {
@@ -616,27 +353,29 @@ export default function () {
 
             return null
         }
-    }, [simulator])
+    }, [em])
 
     const generateShareUrl = useCallback(() => {
-        setShareInProgress(true)
-        const materialMap = getMaterialMap()
-        if (materialMap) {
-            shareSimulatorMap({
-                materialMap: materialMap,
-                simulationSettings: {
-                    cellSize: cellSize,
-                    dt: dt,
-                    gridSize: gridSize,
-                    simulationSpeed: 1
-                },
-                sourceDescriptors: sources.map(source => signalSourceToDescriptor(source))
-            })
-                .then(shareId => setShareId(shareId))
-                .catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
-                .finally(() => setShareInProgress(false))
+        if (em) {
+            setShareInProgress(true)
+            const materialMap = getMaterialMap()
+            if (materialMap) {
+                shareSimulatorMap({
+                    materialMap: materialMap,
+                    simulationSettings: {
+                        cellSize: cellSize,
+                        dt: dt,
+                        gridSize: gridSize,
+                        simulationSpeed: 1
+                    },
+                    sourceDescriptors: em.getSources().map(source => signalSourceToDescriptor(source))
+                })
+                    .then(shareId => setShareId(shareId))
+                    .catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
+                    .finally(() => setShareInProgress(false))
+            }
         }
-    }, [getMaterialMap, dt, cellSize, gridSize, sources])
+    }, [getMaterialMap, dt, cellSize, gridSize, em])
 
     const shareUrl = useMemo(() => {
         return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
@@ -714,9 +453,9 @@ export default function () {
                                             dt={dt} setDt={setDt}
                                             qualityPresets={qualityPresets} /> : (sideBar === SideBarType.Examples ?
                                                 <ExamplesComponent
-                                                    simulator={simulator} setCellSize={setCellSize} setDt={setDt}
+                                                    em={em} setCellSize={setCellSize} setDt={setDt}
                                                     setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                                                    setSources={setSources} gridSize={gridSize} dt={dt}
+                                                    gridSize={gridSize} dt={dt}
                                                     cellSize={cellSize} simulationSpeed={simulationSpeed} /> : <div />)))}
                 </CollapsibleContainer>
             </div>

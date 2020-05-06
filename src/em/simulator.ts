@@ -1,45 +1,37 @@
 import { Regl, Framebuffer2D, DrawCommand } from "regl"
 import * as k from "./kernels/simulation"
+import { DrawInfo } from "./drawing"
 
 export type MaterialType = "permittivity" | "permeability" | "conductivity"
 
-export type DrawShapeType = "square" | "circle"
-
-type BaseDrawInfo = {
-    drawShape: DrawShapeType
-    center: [number, number]
-    value: number
+function clamp(min: number, max: number, value: number) {
+    return Math.max(min, Math.min(max, value))
 }
 
-type DrawSquareInfo = {
-    drawShape: "square"
-    halfSize: number
-} & BaseDrawInfo
+export function combineMaterialMaps(permittivity: number[][],
+    permeability: number[][], conductivity: number[][]): number[][][] {
+    const material: number[][][] = [];
+    const width = permittivity[0].length;
+    const height = permittivity.length;
 
-type DrawCircleInfo = {
-    drawShape: "circle"
-    radius: number
-} & BaseDrawInfo
+    // TODO: Verify same dims
 
-export function makeDrawSquareInfo(center: [number, number], halfSize: number, value: number): DrawSquareInfo {
-    return {
-        drawShape: "square",
-        center,
-        halfSize: halfSize,
-        value
+    for (let y = 0; y < height; y++) {
+        const row: number[][] = []
+
+        for (let x = 0; x < width; x++) {
+            row.push([
+                clamp(0, 255, 128 + 10 * permittivity[y][x]),
+                clamp(0, 255, 128 + 10 * permeability[y][x]),
+                clamp(0, 255, 128 + 10 * conductivity[y][x]),
+            ])
+        }
+
+        material.push(row)
     }
-}
 
-export function makeDrawCircleInfo(center: [number, number], radius: number, value: number): DrawCircleInfo {
-    return {
-        drawShape: "circle",
-        center,
-        radius,
-        value
-    }
+    return material
 }
-
-export type DrawInfo = DrawSquareInfo | DrawCircleInfo
 
 class DoubleFramebuffer2D {
     current: Framebuffer2D
@@ -62,7 +54,7 @@ export type SimulationData = {
     electricField: DoubleFramebuffer2D
     magneticField: DoubleFramebuffer2D
     material: DoubleFramebuffer2D
-    alphaBetaField: DoubleFramebuffer2D
+    alphaBetaField: Framebuffer2D
     electricSourceField: DoubleFramebuffer2D
 }
 
@@ -77,6 +69,8 @@ export interface Simulator {
     setCellSize: (cellSize: number) => void
     getGridSize: () => [number, number]
     setGridSize: (gridSize: [number, number]) => void
+    getReflectiveBoundary: () => boolean
+    setReflectiveBoundary: (reflectiveBoundary: boolean) => void
 }
 
 export class FDTDSimulator implements Simulator {
@@ -136,10 +130,10 @@ export class FDTDSimulator implements Simulator {
             magneticField: makeField(),
             electricSourceField: makeField(),
             material: makeField(),
-            alphaBetaField: makeField()
+            alphaBetaField: makeFrameBuffer()
         }
 
-        const makeFragFn = <T>(frag: string, fbos: DoubleFramebuffer2D, uniforms: T) => {
+        const makeFragFn = <T>(frag: string, fbos: { current: Framebuffer2D }, uniforms: T) => {
             return regl({
                 frag: frag,
                 framebuffer: () => fbos.current,
@@ -181,7 +175,7 @@ export class FDTDSimulator implements Simulator {
             })
         }
 
-        this.updateAlphaBeta = makeFragFn(k.updateAlphaBeta, this.data.alphaBetaField, {
+        this.updateAlphaBeta = makeFragFn(k.updateAlphaBeta, { current: this.data.alphaBetaField }, {
             dt: (_: any, props: any) => props.dt,
             cellSize: (_: any, props: any) => props.cellSize,
             material: (_: any, props: any) => props.material,
@@ -249,7 +243,6 @@ export class FDTDSimulator implements Simulator {
     }
 
     getGridSize = () => this.gridSize;
-
     setGridSize = (gridSize: [number, number]) => {
         this.gridSize = gridSize
 
@@ -261,11 +254,15 @@ export class FDTDSimulator implements Simulator {
     }
 
     getCellSize = () => this.cellSize;
-
     setCellSize = (cellSize: number) => {
         this.cellSize = cellSize
 
         this.resetFields()
+    }
+
+    getReflectiveBoundary = () => this.reflectiveBoundary;
+    setReflectiveBoundary = (reflectiveBoundary: boolean) => {
+        this.reflectiveBoundary = reflectiveBoundary
     }
 
     stepElectric = (dt: number) => {
@@ -295,7 +292,7 @@ export class FDTDSimulator implements Simulator {
         this.updateElectric({
             electricField: this.data.electricField.previous,
             magneticField: this.data.magneticField.current,
-            alphaBetaField: this.data.alphaBetaField.current,
+            alphaBetaField: this.data.alphaBetaField,
             relativeCellSize: [1 / this.gridSize[0], 1 / this.gridSize[1]],
             reflectiveBoundary: this.reflectiveBoundary,
         })
@@ -307,13 +304,13 @@ export class FDTDSimulator implements Simulator {
         if (this.alphaBetaDt !== dt) {
             this.updateAlphaBetaFromMaterial(dt)
         }
-        
+
         this.data.magneticField.swap()
 
         this.updateMagnetic({
             electricField: this.data.electricField.current,
             magneticField: this.data.magneticField.previous,
-            alphaBetaField: this.data.alphaBetaField.current,
+            alphaBetaField: this.data.alphaBetaField,
             relativeCellSize: [1 / this.gridSize[0], 1 / this.gridSize[1]],
             reflectiveBoundary: this.reflectiveBoundary,
         })
@@ -418,6 +415,12 @@ export class FDTDSimulator implements Simulator {
         })
 
         this.updateAlphaBetaFromMaterial(this.alphaBetaDt)
+    }
+
+    loadMaterialFromComponents = (permittivity: number[][], permeability: number[][], conductivity: number[][]) => {
+        this.loadMaterial(
+            combineMaterialMaps(permittivity, permeability, conductivity)
+        )
     }
 
     getData = () => this.data

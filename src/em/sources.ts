@@ -1,4 +1,5 @@
-import { Simulator, makeDrawSquareInfo } from "./simulator"
+import { Simulator } from "./simulator"
+import { makeDrawSquareInfo } from "./drawing"
 
 export interface SignalSource {
     inject(simulator: Simulator, dt: number): void
@@ -18,4 +19,3 @@ export class PointSignalSource implements SignalSource {
         }
     }
 }
-
