@@ -71,9 +71,9 @@ Definitions
     (E_y(X + X_hat * dx, t) - E_y(X, t)) / dx - (E_x(X + Y_hat * dy, t) - E_x(X, t)) / dy = (B_z(X, t) - B_z(X, t+1)) / dt
 
 5. Solve for B(X, t+1):
-    B_x(X, t+1) = -dt * ((E_z(X + Y_hat * dy, t) - E_z(X, t)) / dy)
-    B_y(X, t+1) = -dt * ((E_x(X + Z_hat * dz, t) - E_x(X, t)) / dz)
-    B_z(X, t+1) = -dt * ((E_y(X + X_hat * dx, t) - E_y(X, t)) / dx - (E_x(X + Y_hat * dy, t) - E_x(X, t)) / dy)
+    B_x(X, t+1) = B_x(X, t) - dt * ((E_z(X + Y_hat * dy, t) - E_z(X, t)) / dy)
+    B_y(X, t+1) = B_y(X, t) - dt * ((E_x(X + Z_hat * dz, t) - E_x(X, t)) / dz)
+    B_z(X, t+1) = B_z(X, t) - dt * ((E_y(X + X_hat * dx, t) - E_y(X, t)) / dx - (E_x(X + Y_hat * dy, t) - E_x(X, t)) / dy)
 ```
 
 We can do exactly the same procedure for Ampère's law which yields the update equations for the electric field given the magnetic field and the previous electric field.
