@@ -1,7 +1,7 @@
-export type DrawShapeType = "square" | "circle"
+export type DrawShape = "square" | "circle"
 
 type BaseDrawInfo = {
-    drawShape: DrawShapeType
+    drawShape: DrawShape
     center: [number, number]
     value: number
 }

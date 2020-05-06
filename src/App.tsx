@@ -1,19 +1,15 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { EMState, createEM } from "./em"
-import { makeDrawSquareInfo, makeDrawCircleInfo, DrawShapeType } from "./em/drawing"
+import { makeDrawSquareInfo, makeDrawCircleInfo, DrawShape } from "./em/drawing"
 import { signalSourceToDescriptor, descriptorToSignalSource, makeMaterialMap } from './em/serialization'
-import { CollapsibleContainer, SettingsComponent, ExamplesComponent, ImageButton, ShareComponent, MaterialBrushMenu, SignalBrushMenu } from './components'
-import { toggleFullScreen, clamp, qualityPresets } from './util'
-import * as Icon from "./icons"
+import { 
+    SideBarType, BrushType, CollapsibleContainer, SettingsComponent, ExamplesComponent,
+    MaterialBrushMenu, SignalBrushMenu, MultiMenu, MultiMenuChild, InfoBox, LoadingIndicator,
+    ShareBox, ResetButtons, BrushSelectionButtons, MenuSelectionButtons, BrushCursor, MiscButtons,
+    InteractiveCanvas, FullscreenView 
+} from './components'
+import { clamp, qualityPresets } from './util'
 import { getSharedSimulatorMap, shareSimulatorMap } from './share'
-import { BounceLoader } from "react-spinners"
-
-enum SideBarType {
-    SignalBrush = "Signal Brush",
-    MaterialBrush = "Material Brush",
-    Settings = "Settings",
-    Examples = "Examples"
-}
 
 const defaultPreset = qualityPresets["Medium"]
 
@@ -24,7 +20,7 @@ const defaultPermittivityBrushValue = 5
 const defaultPermeabilityBrushValue = 1
 const defaultConductivityBrushValue = 0
 const defaultMaterialBrushSize = 5
-const defaultDrawShapeType = "square"
+const defaultBrushDrawShape = "square"
 
 const initialDt = defaultPreset.dt
 const initialCellSize = defaultPreset.cellSize
@@ -149,17 +145,15 @@ export default function () {
 
     const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
     const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
-    const [drawShapeType, setDrawShapeType] = useState<DrawShapeType>(defaultDrawShapeType)
+    const [activeBrushShape, setActiveBrushDrawShape] = useState<DrawShape>(defaultBrushDrawShape)
 
     const [materialBrushSize, setMaterialBrushSize] = useState(defaultMaterialBrushSize)
     const [permittivityBrushValue, setPermittivityBrushValue] = useState(defaultPermittivityBrushValue)
     const [permeabilityBrushValue, setPermeabilityBrushValue] = useState(defaultPermeabilityBrushValue)
     const [conductivityBrushValue, setConductivityBrushValue] = useState(defaultConductivityBrushValue)
     const [signalFrequency, setSignalFrequency] = useState(defaultSignalFrequency)
-    const [drawingMaterial, setDrawingMaterial] = useState(false)
-    const optionMaterialBrush = 0
-    const optionSignal = 1
-    const [clickOption, setClickOption] = useState(optionSignal) // material, signal
+    
+    const [activeBrush, setActiveBrush] = useState(BrushType.Signal)
 
     const [mousePosition, setMousePosition] = useState<[number, number] | null>(null)
 
@@ -173,8 +167,6 @@ export default function () {
 
     // Snap input across a line
     const [snapInput, setSnapInput] = useState(false)
-    const [inputStartPos, setInputStartPos] = useState<[number, number] | null>(null)
-    const [inputDir, setInputDir] = useState<[number, number] | null>(null)
 
     const windowToSimulationPoint = useMemo(() => {
         return (windowPoint: [number, number]) => {
@@ -193,7 +185,7 @@ export default function () {
                 const brushHalfSize = signalBrushSize / gridSize[1] / 2
                 const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * em.getTime())
 
-                const drawInfo = drawShapeType === "square" ?
+                const drawInfo = activeBrushShape === "square" ?
                     makeDrawSquareInfo(center, brushHalfSize, value) :
                     makeDrawCircleInfo(center, brushHalfSize, value)
 
@@ -202,7 +194,7 @@ export default function () {
 
             em.stepSim(dt)
         }
-    }, [em, dt, signalFrequency, signalBrushValue, signalBrushSize, windowToSimulationPoint, drawShapeType, gridSize])
+    }, [em, dt, signalFrequency, signalBrushValue, signalBrushSize, windowToSimulationPoint, activeBrushShape, gridSize])
 
     useEffect(() => {
         if (simulationSpeed > 0) {
@@ -239,24 +231,7 @@ export default function () {
         return () => { stop = true }
     }, [drawStep])
 
-    const changeMaterial = useCallback((canvasPos: [number, number]) => {
-        if (em) {
-            const center: [number, number] = windowToSimulationPoint(canvasPos)
-            const brushHalfSize = materialBrushSize / gridSize[1] / 2
-
-            em.drawMaterial("permittivity", drawShapeType === "square" ?
-                makeDrawSquareInfo(center, brushHalfSize, permittivityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, permittivityBrushValue))
-
-            em.drawMaterial("permeability", drawShapeType === "square" ?
-                makeDrawSquareInfo(center, brushHalfSize, permeabilityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, permeabilityBrushValue))
-
-            em.drawMaterial("conductivity", drawShapeType === "square" ?
-                makeDrawSquareInfo(center, brushHalfSize, conductivityBrushValue) :
-                makeDrawCircleInfo(center, brushHalfSize, conductivityBrushValue))
-        }
-    }, [em, gridSize, materialBrushSize, permittivityBrushValue, permeabilityBrushValue, conductivityBrushValue, drawShapeType, windowToSimulationPoint])
+    
 
     const resetMaterials = useCallback(() => {
         if (em) {
@@ -274,64 +249,7 @@ export default function () {
 
     const [isInputDown, setIsInputDown] = useState(false)
 
-    const onInputDown = useCallback((clientPos: [number, number]) => {
-        setInputStartPos(clientPos)
-
-        if (clickOption === optionSignal) {
-            mouseDownPos.current = clientPos
-        } else if (clickOption === optionMaterialBrush) {
-            changeMaterial(clientPos)
-            setDrawingMaterial(true)
-        }
-
-        setIsInputDown(true)
-    }, [changeMaterial, clickOption])
-
-    const onInputMove = useCallback((clientPos: [number, number], shiftDown?: boolean) => {
-        let pos: [number, number] = clientPos
-
-        // If snapping, change the position to lie along the draw line
-        if ((snapInput || shiftDown) && inputStartPos) {
-            const offset = [pos[0] - inputStartPos[0], pos[1] - inputStartPos[1]]
-            if (inputDir) {
-                const projection = offset[0] * inputDir[0] + offset[1] * inputDir[1]
-                pos = [inputStartPos[0] + projection * inputDir[0], inputStartPos[1] + projection * inputDir[1]]
-            } else {
-                const offsetLengthSq = offset[0] * offset[0] + offset[1] * offset[1]
-                const minimumSnapLengthSq = 0.01 * 0.01 * (windowSize[0] * windowSize[0] + windowSize[1] * windowSize[1])
-                if (offsetLengthSq > minimumSnapLengthSq) {
-                    // Snap to discrete angles
-                    const angleQuantum = Math.PI / 4
-                    const snappedAngle = Math.round(Math.atan2(offset[1], offset[0]) / angleQuantum) * angleQuantum
-                    const dir: [number, number] = [Math.cos(snappedAngle), Math.sin(snappedAngle)]
-                    setInputDir(dir)
-                }
-            }
-        }
-
-        if (clickOption === optionSignal && mouseDownPos.current !== null) {
-            mouseDownPos.current = pos
-        }
-
-        if (drawingMaterial) {
-            changeMaterial(pos)
-        }
-    }, [changeMaterial, clickOption, drawingMaterial, inputDir, inputStartPos, windowSize, snapInput])
-
-    const onInputUp = useCallback(() => {
-        if (clickOption === optionSignal) {
-            mouseDownPos.current = null
-        } else if (clickOption === optionMaterialBrush) {
-            setDrawingMaterial(false)
-        }
-
-        setInputDir(null)
-        setInputStartPos(null)
-
-        setIsInputDown(false)
-    }, [clickOption])
-
-    const activeBrushSize = useMemo(() => (clickOption === optionSignal ? signalBrushSize : materialBrushSize) * (canvasSize[0] / gridSize[0]), [clickOption, signalBrushSize, materialBrushSize, canvasSize, gridSize])
+    const activeBrushSize = useMemo(() => (activeBrush === BrushType.Signal ? signalBrushSize : materialBrushSize) * (canvasSize[0] / gridSize[0]), [activeBrush, signalBrushSize, materialBrushSize, canvasSize, gridSize])
 
     const [sideBar, setSideBar] = useState(SideBarType.SignalBrush)
     const [shareVisible, setShareVisible] = useState(false)
@@ -370,111 +288,71 @@ export default function () {
     }, [sideBar])
 
     return (
-        <div>
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, touchAction: "none", userSelect: "none" }}>
-                <canvas width={canvasSize[0]} height={canvasSize[1]} ref={drawCanvasRef} style={{ position: "absolute", width: windowSize[0], height: windowSize[1], cursor: "none" }}
-                    onMouseDown={e => onInputDown([e.clientX, e.clientY])}
-                    onMouseMove={e => { setMousePosition([e.clientX, e.clientY]); onInputMove([e.clientX, e.clientY], e.shiftKey) }}
-                    onMouseUp={e => onInputUp()}
-                    onMouseLeave={e => onInputUp()}
-                    onTouchStart={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputDown([e.touches[0].clientX, e.touches[0].clientY]) }}
-                    onTouchMove={e => { setMousePosition([e.touches[0].clientX, e.touches[0].clientY]); onInputMove([e.touches[0].clientX, e.touches[0].clientY]) }}
-                    onTouchEnd={e => { setMousePosition(null); onInputUp() }}
-                    onTouchCancel={e => { setMousePosition(null); onInputUp() }}
-                    onContextMenu={e => e.preventDefault()}
-                />
+        <>
+            <FullscreenView>
+                <InteractiveCanvas activeBrush={activeBrush} activeBrushShape={activeBrushShape} canvasSize={canvasSize}
+                    conductivityBrushValue={conductivityBrushValue} drawCanvasRef={drawCanvasRef} em={em}
+                    gridSize={gridSize} materialBrushSize={materialBrushSize} mouseDownPos={mouseDownPos}
+                    permeabilityBrushValue={permeabilityBrushValue} permittivityBrushValue={permittivityBrushValue}
+                    setIsInputDown={setIsInputDown} setMousePosition={setMousePosition} snapInput={snapInput}
+                    windowSize={windowSize} windowToSimulationPoint={windowToSimulationPoint} />
 
-                <div style={{ position: "absolute", bottom: 10, right: 10, ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={_ => { generateShareUrl(); setShareVisible(!shareVisible) }} src={Icon.Share} highlight={shareVisible} />
-                    <ImageButton onClick={_ => setInfoVisible(!infoVisible)} src={Icon.Info} />
-                    <a href="https://github.com/RobinKa/maxwell-simulation"><ImageButton src={Icon.GitHub} /></a>
-                </div>
+                <BrushCursor mousePosition={mousePosition} activeBrushSize={activeBrushSize} brushShape={activeBrushShape} />
 
-                {mousePosition && (drawShapeType === "square" ?
-                    <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid rgb(255, 89, 0)" }} /> :
-                    <div style={{ position: "absolute", pointerEvents: "none", left: mousePosition[0] - activeBrushSize / 2, top: mousePosition[1] - activeBrushSize / 2, width: activeBrushSize, height: activeBrushSize, border: "2px solid rgb(255, 89, 0)", borderRadius: "50%" }} />)
-                }
-
-                <div style={{ position: "absolute", top: "10px", left: "10px", ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={_ => { setSideBar(SideBarType.SignalBrush); setClickOption(optionSignal) }} src={Icon.SignalBrush} highlight={sideBar === SideBarType.SignalBrush} />
-                    <ImageButton onClick={_ => { setSideBar(SideBarType.MaterialBrush); setClickOption(optionMaterialBrush) }} src={Icon.MaterialBrush} highlight={sideBar === SideBarType.MaterialBrush} />
-                </div>
-
-                <div style={{ position: "absolute", top: "10px", right: "10px", ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={_ => setSideBar(SideBarType.Examples)} src={Icon.Examples} highlight={sideBar === SideBarType.Examples} />
-                    <ImageButton onClick={_ => setSideBar(SideBarType.Settings)} src={Icon.Settings} highlight={sideBar === SideBarType.Settings} />
-                    <ImageButton onClick={toggleFullScreen} src={Icon.Fullscreen} />
-                </div>
-
-                <div style={{ position: "absolute", bottom: "10px", left: "10px", ...hideWhenInputDownStyle }}>
-                    <ImageButton onClick={resetFields} src={Icon.ResetFields} />
-                    <ImageButton onClick={resetMaterials} src={Icon.ResetMaterials} />
-                </div>
+                <MiscButtons extraStyle={hideWhenInputDownStyle} generateShareUrl={generateShareUrl}
+                    infoVisible={infoVisible} setInfoVisible={setInfoVisible}
+                    shareVisible={shareVisible} setShareVisible={setShareVisible} />
+                <BrushSelectionButtons activeSideBar={sideBar} setActiveSideBar={setSideBar} setActiveBrush={setActiveBrush} extraStyle={hideWhenInputDownStyle} />
+                <MenuSelectionButtons activeSideBar={sideBar} setActiveSideBar={setSideBar} extraStyle={hideWhenInputDownStyle} />
+                <ResetButtons resetFields={resetFields} resetMaterials={resetMaterials} extraStyle={hideWhenInputDownStyle} />
 
                 <CollapsibleContainer collapsed={sideMenuCollapsed} setCollapsed={setSideMenuCollapsed} title={sideBar.toString()}
                     style={{ position: "absolute", top: "50%", height: "400px", marginTop: "-200px", right: 0, opacity: 0.9, ...hideWhenInputDownStyle }}>
-                    {sideBar === SideBarType.SignalBrush ?
-                        <SignalBrushMenu
-                            signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
-                            signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
-                            signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
-                            drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
-                            snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.MaterialBrush ?
-                                <MaterialBrushMenu
-                                    materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
-                                    permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
-                                    permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
-                                    conductivityBrushValue={conductivityBrushValue} setConductivityBrushValue={setConductivityBrushValue}
-                                    drawShapeType={drawShapeType} setDrawShapeType={setDrawShapeType}
-                                    snapInput={snapInput} setSnapInput={setSnapInput} /> : (sideBar === SideBarType.Settings ?
-                                        <SettingsComponent
-                                            gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                                            simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
-                                            resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
-                                            cellSize={cellSize} setCellSize={setCellSize}
-                                            reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
-                                            dt={dt} setDt={setDt}
-                                            qualityPresets={qualityPresets} /> : (sideBar === SideBarType.Examples ?
-                                                <ExamplesComponent
-                                                    em={em} setCellSize={setCellSize} setDt={setDt}
-                                                    setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                                                    gridSize={gridSize} dt={dt}
-                                                    cellSize={cellSize} simulationSpeed={simulationSpeed} /> : <div />)))}
+                    <MultiMenu activeState={sideBar}>
+                        <MultiMenuChild activateForState={SideBarType.SignalBrush}>
+                            <SignalBrushMenu
+                                signalBrushSize={signalBrushSize} setSignalBrushSize={setSignalBrushSize}
+                                signalBrushValue={signalBrushValue} setSignalBrushValue={setSignalBrushValue}
+                                signalFrequency={signalFrequency} setSignalFrequency={setSignalFrequency}
+                                activeBrushShape={activeBrushShape} setActiveBrushDrawShape={setActiveBrushDrawShape}
+                                snapInput={snapInput} setSnapInput={setSnapInput} />
+                        </MultiMenuChild>
+
+                        <MultiMenuChild activateForState={SideBarType.MaterialBrush}>
+                            <MaterialBrushMenu
+                                materialBrushSize={materialBrushSize} setMaterialBrushSize={setMaterialBrushSize}
+                                permittivityBrushValue={permittivityBrushValue} setPermittivityBrushValue={setPermittivityBrushValue}
+                                permeabilityBrushValue={permeabilityBrushValue} setPermeabilityBrushValue={setPermeabilityBrushValue}
+                                conductivityBrushValue={conductivityBrushValue} setConductivityBrushValue={setConductivityBrushValue}
+                                activeBrushShape={activeBrushShape} setActiveBrushDrawShape={setActiveBrushDrawShape}
+                                snapInput={snapInput} setSnapInput={setSnapInput} />
+                        </MultiMenuChild>
+
+                        <MultiMenuChild activateForState={SideBarType.Settings}>
+                            <SettingsComponent
+                                gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                                simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                                resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
+                                cellSize={cellSize} setCellSize={setCellSize}
+                                reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
+                                dt={dt} setDt={setDt}
+                                qualityPresets={qualityPresets} />
+                        </MultiMenuChild>
+
+                        <MultiMenuChild activateForState={SideBarType.Examples}>
+                            <ExamplesComponent
+                                em={em} setCellSize={setCellSize} setDt={setDt}
+                                setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
+                                gridSize={gridSize} dt={dt}
+                                cellSize={cellSize} simulationSpeed={simulationSpeed} />
+                        </MultiMenuChild>
+                    </MultiMenu>
                 </CollapsibleContainer>
-            </div>
+            </FullscreenView>
 
-            {shareVisible &&
-                <div>
-                    <div onClick={_ => setShareVisible(false)} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
-                    {!(shareInProgress || !shareUrl) &&
-                        <div style={{ position: "absolute", backgroundColor: "rgb(30, 30, 30)", left: "50%", top: "50%", marginLeft: "-150px", marginTop: "-30px", width: "300px", height: "60px", textAlign: "center", padding: "10px" }}>
-                            <ShareComponent shareUrl={shareUrl} shareText="Check out what I made in this interactive web-based simulator for electromagnetic waves!" shareTitle="EM Simulator" />
-                        </div>
-                    }
-                </div>
-            }
-
-            {((shareVisible && (shareInProgress || !shareUrl)) || showLoading) &&
-                <div>
-                    <div style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
-                    <div style={{ position: "absolute", left: "50%", top: "50%", marginLeft: "-75px", marginTop: "-75px", width: "150px", height: "150px", textAlign: "center" }}>
-                        <BounceLoader color="rgb(0, 150, 255)" size={100} />
-                    </div>
-                </div>
-            }
-
-            {infoVisible &&
-                <div>
-                    <div onClick={_ => setInfoVisible(false)} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, background: "rgba(0, 0, 0, 0.5)" }} />
-                    <div style={{ position: "absolute", backgroundColor: "rgb(30, 30, 30)", left: "50%", top: "50%", marginLeft: "-150px", marginTop: "-70px", width: "300px", height: "140px", textAlign: "center", padding: "10px", color: "white", fontWeight: "lighter" }}>
-                        <div>
-                            Made by <a href="https://github.com/RobinKa" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Robin Kahlow</a>. If you have feedback, ideas for improvement, bug reports or anything else open an issue on <a href="https://github.com/RobinKa/maxwell-simulation/issues" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">GitHub</a> or <a href="mailto:tora@warlock.ai?subject=EM simulation feedback" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }}>send an email to tora@warlock.ai</a>.
-                        </div>
-                        <div style={{ marginTop: "5px" }}><a href="https://github.com/RobinKa/maxwell-simulation" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Source code</a></div>
-                        <div style={{ marginTop: "5px" }}>Icons by <a href="https://icons8.com/" style={{ textDecoration: "none", color: "rgb(0, 150, 255)" }} rel="noopener noreferrer" target="_blank">Icons8</a></div>
-                    </div>
-                </div>
-            }
-        </div>
+            <ShareBox visible={shareVisible} setVisible={setShareVisible} shareUrl={shareUrl} shareInProgress={shareInProgress} />
+            <LoadingIndicator visible={(shareVisible && (shareInProgress || !shareUrl)) || showLoading} />
+            <InfoBox visible={infoVisible} setVisible={setInfoVisible} />
+        </>
     )
 }
