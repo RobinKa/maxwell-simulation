@@ -13,8 +13,13 @@ export type EMState = {
     getSources: () => SignalSource[]
     setSources: (newSources: SignalSource[]) => void
 
+    getGridSize: () => [number, number]
     setGridSize: (newGridSize: [number, number]) => void
+
+    getCellSize: () => number
     setCellSize: (newCellSize: number) => void
+
+    getReflectiveBoundary: () => boolean
     setReflectiveBoundary: (reflectiveBoundary: boolean) => void
 
     getTime: () => number
@@ -65,9 +70,12 @@ export function createEM(canvas: HTMLCanvasElement, gridSize: [number, number],
         injectSignal: sim.injectSignal,
         getSources: () => sources,
         setSources: (newSources: SignalSource[]) => sources = newSources,
+        getGridSize: sim.getGridSize,
         setGridSize: setGridSize,
+        getCellSize: sim.getCellSize,
         setCellSize: sim.setCellSize,
         getTime: () => sim.getData().time,
+        getReflectiveBoundary: sim.getReflectiveBoundary,
         setReflectiveBoundary: sim.setReflectiveBoundary,
         loadMaterialFromComponents: sim.loadMaterialFromComponents,
         resetFields: sim.resetFields,

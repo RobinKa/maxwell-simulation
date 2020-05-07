@@ -1,5 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react'
-import { EMState, createEM } from "./em"
+import React, { useRef, useCallback, useEffect, useState, useMemo, useReducer } from 'react'
 import { makeDrawSquareInfo, makeDrawEllipseInfo, DrawShape } from "./em/drawing"
 import { signalSourceToDescriptor, descriptorToSignalSource, makeMaterialMap } from './em/serialization'
 import {
@@ -10,8 +9,7 @@ import {
 } from './components'
 import { clamp, qualityPresets } from './util'
 import { getSharedSimulatorMap, shareSimulatorMap } from './share'
-
-const defaultPreset = qualityPresets["Medium"]
+import { appReducer, makeAppState } from './AppState'
 
 const defaultSignalBrushValue = 10
 const defaultSignalBrushSize = 1
@@ -22,70 +20,37 @@ const defaultConductivityBrushValue = 0
 const defaultMaterialBrushSize = 5
 const defaultBrushDrawShape = DrawShape.Square
 
-const initialDt = defaultPreset.dt
-const initialCellSize = defaultPreset.cellSize
-const initialSimulationSpeed = 1
-const initialGridSizeLongest = defaultPreset.gridSizeLongest
-const initialResolutionScale = defaultPreset.resolutionScale
-const initialWindowSize: [number, number] = [window.innerWidth, window.innerHeight]
-const initialCanvasSize: [number, number] = calculateCanvasSize(initialWindowSize, initialResolutionScale)
-const initialGridSize: [number, number] = calculateGridSize(initialGridSizeLongest, initialCanvasSize)
-const initialReflectiveBoundary = false
-
-function calculateCanvasSize(windowSize: [number, number], resolutionScale: number): [number, number] {
-    return [Math.round(windowSize[0] * resolutionScale), Math.round(windowSize[1] * resolutionScale)]
-}
-
-function calculateGridSize(gridSizeLongest: number, canvasSize: [number, number]): [number, number] {
-    const canvasAspect = canvasSize[0] / canvasSize[1]
-
-    return canvasSize[0] >= canvasSize[1] ?
-        [gridSizeLongest, Math.ceil(gridSizeLongest / canvasAspect)] :
-        [Math.ceil(gridSizeLongest * canvasAspect), gridSizeLongest]
-}
-
 export default function () {
-    const urlShareId = window.location.hash ? window.location.hash.substr(1) : null
-    const [shareId, setShareId] = useState<string | null>(urlShareId)
-
     const drawCanvasRef = useRef<HTMLCanvasElement>(null)
+    const [state, dispatch] = useReducer(appReducer, makeAppState())
 
-    const [canvasSize, setCanvasSize] = useState<[number, number]>(initialCanvasSize)
-    const [windowSize, setWindowSize] = useState<[number, number]>(initialWindowSize)
-    const [gridSizeLongest, setGridSizeLongest] = useState(initialGridSizeLongest)
-    const [dt, setDt] = useState(initialDt)
-    const [cellSize, setCellSize] = useState(initialCellSize)
-    const [resolutionScale, setResolutionScale] = useState(initialResolutionScale)
-    const [simulationSpeed, setSimulationSpeed] = useState(initialSimulationSpeed)
-    const [reflectiveBoundary, setReflectiveBoundary] = useState(initialReflectiveBoundary)
-
-    const gridSize = useMemo<[number, number]>(() => calculateGridSize(gridSizeLongest, canvasSize), [canvasSize, gridSizeLongest])
-    const [em, setEm] = useState<EMState | null>(null)
-
-    // Would use useMemo for gpu here, but useMemo does not seem to work with ref dependencies.
+    // Set canvas
     useEffect(() => {
-        if (drawCanvasRef.current) {
-            setEm(createEM(drawCanvasRef.current, initialGridSize,
-                initialCellSize, initialReflectiveBoundary, initialDt))
-        }
+        dispatch({
+            type: "setDrawCanvas",
+            drawCanvas: drawCanvasRef.current
+        })
     }, [drawCanvasRef])
 
     // Window resize canvas
     useEffect(() => {
         const adjustCanvasSize = () => {
-            const wndSize: [number, number] = [window.innerWidth, window.innerHeight]
-            setCanvasSize(calculateCanvasSize(wndSize, resolutionScale))
-            setWindowSize(wndSize)
+            dispatch({
+                type: "setParameters",
+                windowSize: [window.innerWidth, window.innerHeight]
+            })
         }
 
         adjustCanvasSize()
 
         window.addEventListener("resize", adjustCanvasSize)
         return () => window.removeEventListener("resize", adjustCanvasSize)
-    }, [resolutionScale])
+    }, [])
 
-    // Load share id
+    // Load share id if one was given
     useEffect(() => {
+        const em = state.em
+        const urlShareId = state.urlShareId
         if (em && urlShareId) {
             setShowLoading(true)
             console.log(`Loading ${urlShareId}`)
@@ -98,9 +63,16 @@ export default function () {
                 )
 
                 // Load settings
-                setDt(simulatorMap.simulationSettings.dt)
-                setGridSizeLongest(Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1]))
-                setCellSize(simulatorMap.simulationSettings.cellSize)
+                dispatch({
+                    type: "setParameters",
+                    dt: simulatorMap.simulationSettings.dt
+                })
+
+                dispatch({
+                    type: "setSimulationParameters",
+                    cellSize: simulatorMap.simulationSettings.cellSize,
+                    gridSizeLongest: Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1])
+                })
 
                 // Load sources
                 em.setSources(simulatorMap.sourceDescriptors.map(desc => descriptorToSignalSource(desc)))
@@ -108,39 +80,7 @@ export default function () {
                 console.log(`Loaded ${urlShareId}`)
             }).catch(err => console.error(`Error getting share ${urlShareId}: ${JSON.stringify(err)}`)).finally(() => setShowLoading(false))
         }
-    }, [em, urlShareId])
-
-    // Update render sim output size
-    useEffect(() => {
-        if (em) {
-            em.adjustCanvasSize(canvasSize)
-            em.resetFields()
-            em.resetMaterials()
-        }
-    }, [em, canvasSize])
-
-    // Update simulator grid size
-    useEffect(() => {
-        if (em) {
-            em.setGridSize(gridSize)
-            em.resetFields()
-            em.resetMaterials()
-        }
-    }, [em, gridSize])
-
-    // Update simulator cell size
-    useEffect(() => {
-        if (em) {
-            em.setCellSize(cellSize)
-        }
-    }, [em, cellSize])
-
-    // Update reflective boundary
-    useEffect(() => {
-        if (em) {
-            em.setReflectiveBoundary(reflectiveBoundary)
-        }
-    }, [em, reflectiveBoundary])
+    }, [state.em, state.urlShareId])
 
     const [signalBrushSize, setSignalBrushSize] = useState(defaultSignalBrushSize)
     const [signalBrushValue, setSignalBrushValue] = useState(defaultSignalBrushValue)
@@ -172,59 +112,52 @@ export default function () {
     const windowToSimulationPoint = useMemo(() => {
         return (windowPoint: [number, number]) => {
             const simulationPoint: [number, number] = [
-                clamp(0, 1, windowPoint[0] / windowSize[0]),
-                clamp(0, 1, 1 - windowPoint[1] / windowSize[1])
+                clamp(0, 1, windowPoint[0] / state.windowSize[0]),
+                clamp(0, 1, 1 - windowPoint[1] / state.windowSize[1])
             ]
 
             return simulationPoint
         }
-    }, [windowSize])
+    }, [state.windowSize])
 
     // Simulate one step
     const simStep = useCallback(() => {
-        if (em) {
+        if (state.em) {
             if (mouseDownPos.current !== null) {
+                const gridSize = state.gridSize
                 const center: [number, number] = windowToSimulationPoint(mouseDownPos.current)
                 const brushHalfSize: [number, number] = [
                     signalBrushSize / gridSize[0] / 2,
                     signalBrushSize / gridSize[1] / 2
                 ]
 
-                const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * em.getTime())
+                const value = -signalBrushValue * 2000 * Math.cos(2 * Math.PI * signalFrequency * state.em.getTime())
 
                 const drawInfo = activeBrushShape === DrawShape.Square ?
                     makeDrawSquareInfo(center, brushHalfSize, value) :
                     makeDrawEllipseInfo(center, brushHalfSize, value)
 
-                em.injectSignal(drawInfo, dt)
+                state.em.injectSignal(drawInfo, state.dt)
             }
 
-            em.stepSim(dt)
+            state.em.stepSim(state.dt)
         }
-    }, [em, dt, signalFrequency, signalBrushValue, signalBrushSize, windowToSimulationPoint, activeBrushShape, gridSize])
+    }, [state.em, state.dt, state.gridSize, signalFrequency, signalBrushValue, signalBrushSize, windowToSimulationPoint, activeBrushShape])
 
     // Change simulation speed
     useEffect(() => {
-        if (simulationSpeed > 0) {
-            const timer = setInterval(simStep, 1000 / simulationSpeed * dt)
+        if (state.simulationSpeed > 0) {
+            const timer = setInterval(simStep, 1000 / state.simulationSpeed * state.dt)
             return () => clearInterval(timer)
         }
 
         return undefined
-    }, [simStep, dt, simulationSpeed])
+    }, [simStep, state.dt, state.simulationSpeed])
 
     // Draw one frame
     const drawStep = useCallback(() => {
-        if (em) {
-            if (drawCanvasRef.current) {
-                const cnvSize = calculateCanvasSize([window.innerWidth, window.innerHeight], resolutionScale)
-                drawCanvasRef.current.width = cnvSize[0]
-                drawCanvasRef.current.height = cnvSize[1]
-            }
-
-            em?.renderToCanvas(true, true)
-        }
-    }, [em, resolutionScale, drawCanvasRef])
+        state.em?.renderToCanvas(true, true)
+    }, [state.em])
 
     // Draw loop
     useEffect(() => {
@@ -243,23 +176,26 @@ export default function () {
 
     // Reset materials in the simulator
     const resetMaterials = useCallback(() => {
-        if (em) {
-            em.setSources([])
-            em.resetMaterials()
+        if (state.em) {
+            state.em.setSources([])
+            state.em.resetMaterials()
         }
-    }, [em])
+    }, [state.em])
 
     // Reset fields in the simulator
     const resetFields = useCallback(() => {
-        if (em) {
-            em.resetFields()
+        if (state.em) {
+            state.em.resetFields()
             signalStrength.current = 0
         }
-    }, [em])
+    }, [state.em])
 
     const [isInputDown, setIsInputDown] = useState(false)
 
-    const activeBrushSize = useMemo(() => (activeBrush === BrushType.Signal ? signalBrushSize : materialBrushSize) * (canvasSize[0] / gridSize[0]), [activeBrush, signalBrushSize, materialBrushSize, canvasSize, gridSize])
+    const activeBrushSize = useMemo(() =>
+        (activeBrush === BrushType.Signal ? signalBrushSize : materialBrushSize) * (state.canvasSize[0] / state.gridSize[0]),
+        [activeBrush, signalBrushSize, materialBrushSize, state.canvasSize, state.gridSize]
+    )
 
     const [sideBar, setSideBar] = useState(SideBarType.SignalBrush)
     const [shareVisible, setShareVisible] = useState(false)
@@ -267,44 +203,68 @@ export default function () {
     const hideWhenInputDownStyle = useMemo<React.CSSProperties>(() => isInputDown ? { pointerEvents: "none", opacity: 0.2 } : {}, [isInputDown])
 
     const generateShareUrl = useCallback(() => {
-        if (em) {
+        if (state.em) {
             setShareInProgress(true)
-            const material = em.getMaterial()
+            const material = state.em.getMaterial()
             if (material) {
                 shareSimulatorMap({
                     materialMap: makeMaterialMap(material),
                     simulationSettings: {
-                        cellSize: cellSize,
-                        dt: dt,
-                        gridSize: gridSize,
+                        cellSize: state.cellSize,
+                        dt: state.dt,
+                        gridSize: state.gridSize,
                         simulationSpeed: 1
                     },
-                    sourceDescriptors: em.getSources().map(source => signalSourceToDescriptor(source))
+                    sourceDescriptors: state.em.getSources().map(source => signalSourceToDescriptor(source))
                 })
-                    .then(shareId => setShareId(shareId))
+                    .then(shareId => dispatch({ type: "setParameters", shareId: shareId }))
                     .catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
                     .finally(() => setShareInProgress(false))
             }
         }
-    }, [dt, cellSize, gridSize, em])
+    }, [state.dt, state.cellSize, state.gridSize, state.em])
 
     const shareUrl = useMemo(() => {
-        return shareId ? `${window.location.origin}${window.location.pathname}#${shareId}` : null
-    }, [shareId])
+        return state.shareId ? `${window.location.origin}${window.location.pathname}#${state.shareId}` : null
+    }, [state.shareId])
 
     // Open side menu when switching the side bar
     useEffect(() => {
         setSideMenuCollapsed(false)
     }, [sideBar])
 
+    const setGridSizeLongest = useCallback((newGridSizeLongest: number) => {
+        dispatch({ type: "setSimulationParameters", gridSizeLongest: newGridSizeLongest })
+    }, [dispatch])
+
+    const setCellSize = useCallback((newCellSize: number) => {
+        dispatch({ type: "setSimulationParameters", cellSize: newCellSize })
+    }, [dispatch])
+
+    const setReflectiveBoundary = useCallback((newReflectiveBoundary: boolean) => {
+        dispatch({ type: "setSimulationParameters", reflectiveBoundary: newReflectiveBoundary })
+    }, [dispatch])
+
+    const setDt = useCallback((newDt: number) => {
+        dispatch({ type: "setParameters", dt: newDt })
+    }, [dispatch])
+
+    const setSimulationSpeed = useCallback((newSimulationSpeed: number) => {
+        dispatch({ type: "setParameters", simulationSpeed: newSimulationSpeed })
+    }, [dispatch])
+
+    const setResolutionScale = useCallback((newResolutionScale: number) => {
+        dispatch({ type: "setParameters", resolutionScale: newResolutionScale })
+    }, [dispatch])
+
     return <>
         <FullscreenView>
-            <InteractiveCanvas activeBrush={activeBrush} activeBrushShape={activeBrushShape} canvasSize={canvasSize}
-                conductivityBrushValue={conductivityBrushValue} drawCanvasRef={drawCanvasRef} em={em}
-                gridSize={gridSize} materialBrushSize={materialBrushSize} mouseDownPos={mouseDownPos}
+            <InteractiveCanvas activeBrush={activeBrush} activeBrushShape={activeBrushShape} canvasSize={state.canvasSize}
+                conductivityBrushValue={conductivityBrushValue} drawCanvasRef={drawCanvasRef} em={state.em}
+                gridSize={state.gridSize} materialBrushSize={materialBrushSize} mouseDownPos={mouseDownPos}
                 permeabilityBrushValue={permeabilityBrushValue} permittivityBrushValue={permittivityBrushValue}
                 setIsInputDown={setIsInputDown} setMousePosition={setMousePosition} snapInput={snapInput}
-                windowSize={windowSize} windowToSimulationPoint={windowToSimulationPoint} />
+                windowSize={state.windowSize} windowToSimulationPoint={windowToSimulationPoint} />
 
             <BrushCursor mousePosition={mousePosition} activeBrushSize={activeBrushSize} brushShape={activeBrushShape} />
 
@@ -339,21 +299,21 @@ export default function () {
 
                     <MultiMenuChild activateForState={SideBarType.Settings}>
                         <SettingsComponent
-                            gridSizeLongest={gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
-                            simulationSpeed={simulationSpeed} setSimulationSpeed={setSimulationSpeed}
-                            resolutionScale={resolutionScale} setResolutionScale={setResolutionScale}
-                            cellSize={cellSize} setCellSize={setCellSize}
-                            reflectiveBoundary={reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
-                            dt={dt} setDt={setDt}
+                            gridSizeLongest={state.gridSizeLongest} setGridSizeLongest={setGridSizeLongest}
+                            simulationSpeed={state.simulationSpeed} setSimulationSpeed={setSimulationSpeed}
+                            resolutionScale={state.resolutionScale} setResolutionScale={setResolutionScale}
+                            cellSize={state.cellSize} setCellSize={setCellSize}
+                            reflectiveBoundary={state.reflectiveBoundary} setReflectiveBoundary={setReflectiveBoundary}
+                            dt={state.dt} setDt={setDt}
                             qualityPresets={qualityPresets} />
                     </MultiMenuChild>
 
                     <MultiMenuChild activateForState={SideBarType.Examples}>
                         <ExamplesComponent
-                            em={em} setCellSize={setCellSize} setDt={setDt}
+                            em={state.em} setCellSize={setCellSize} setDt={setDt}
                             setGridSizeLongest={setGridSizeLongest} setSimulationSpeed={setSimulationSpeed}
-                            gridSize={gridSize} dt={dt}
-                            cellSize={cellSize} simulationSpeed={simulationSpeed} />
+                            gridSize={state.gridSize} dt={state.dt}
+                            cellSize={state.cellSize} simulationSpeed={state.simulationSpeed} />
                     </MultiMenuChild>
                 </MultiMenu>
             </CollapsibleContainer>
