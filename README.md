@@ -39,42 +39,39 @@ With this information we can derive all the equations we need for simulation. We
 Here we make the magnetic field grid exist at a `0.5 * cell size` offset from the electric field grid.
 Now we can discretize the Fadaray's and Ampère's law to obtain the update equations for the magnetic and electric fields respectively.
 
-Update equations for Faraday's law which will give us the magnetic field given the electric field and the previous magnetic field:
+Below we derive the update equations for Faraday's law which will give us the magnetic field given the electric field and the previous magnetic field.
+
+**Notation**
 ```
-Definitions
-    X: position 3-vector
-    X/Y/Z_hat: unit 3-vector in X/Y/Z direction
-    x, y, z: individual position coordinates
-    t: time
-    E: electric field
-    B: magnetic field
-    d/dt: time-derivative operator
-    dx/y/z: Spatial grid cell size
-    dt: Time step size
-
-1. Faraday's law
-    curl E(X, t) = -d/dt B(X, t)
-
-2. Write out curl and individual vector components
-    d/dy E_z(X, t) - d/dz E_y(X, t) = -d/dt B_x(X, t)
-    d/dz E_x(X, t) - d/dx E_z(X, t) = -d/dt B_y(X, t)
-    d/dx E_y(X, t) - d/dy E_x(X, t) = -d/dt B_z(X, t)
-
-3. Set Z-derivatives (d/dz) to zero
-    d/dy E_z(X, t) = -d/dt B_x(X, t)
-    -d/dx E_z(X, t) = -d/dt B_y(X, t)
-    d/dx E_y(X, t) - d/dy E_x(X, t) = -d/dt B_z(X, t)
-
-4. Discretize curl and time-derivative
-    (E_z(X + Y_hat * dy, t) - E_z(X, t)) / dy = (B_x(X, t) - B_x(X, t+1)) / dt
-    -(E_z(X + X_hat * dx, t) - E_z(X, t)) / dx = (B_y(X, t) - B_y(X, t+1)) / dt
-    (E_y(X + X_hat * dx, t) - E_y(X, t)) / dx - (E_x(X + Y_hat * dy, t) - E_x(X, t)) / dy = (B_z(X, t) - B_z(X, t+1)) / dt
-
-5. Solve for B(X, t+1):
-    B_x(X, t+1) = B_x(X, t) - dt * ((E_z(X + Y_hat * dy, t) - E_z(X, t)) / dy)
-    B_y(X, t+1) = B_y(X, t) - dt * ((E_x(X + Z_hat * dz, t) - E_x(X, t)) / dz)
-    B_z(X, t+1) = B_z(X, t) - dt * ((E_y(X + X_hat * dx, t) - E_y(X, t)) / dx - (E_x(X + Y_hat * dy, t) - E_x(X, t)) / dy)
+X: position 3-vector
+x, y, z: individual position coordinates
+\hat{X/Y/Z}: unit 3-vector in X/Y/Z direction
+t: time
+E: electric field
+B: magnetic field
+C_x/y/z: Spatial grid cell size
+𝜏: Time step size
 ```
+
+**1. Faraday's law**
+
+![](images/eq_faraday.png)
+
+**2. Write out curl and individual vector components**
+
+![](images/eq_split_curl.png)
+
+**3. Set Z-derivatives (d/dz) to zero**
+
+![](images/eq_z_deriv_zero.png)
+
+**4. Discretize curl and time-derivative**
+
+![](images/eq_disc.png)
+
+**5. Solve for B_t+1(X)**
+
+![](images/eq_solved.png)
 
 We can do exactly the same procedure for Ampère's law which yields the update equations for the electric field given the magnetic field and the previous electric field.
 
