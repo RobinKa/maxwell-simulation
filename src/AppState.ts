@@ -41,32 +41,18 @@ export type AppState = {
     em: EMState | null
 }
 
-export type AppStateActionSetEm = {
-    type: "setDrawCanvas"
-    drawCanvas: HTMLCanvasElement | null
-}
-
-export type AppStateActionSetSimulationParameters = {
-    type: "setSimulationParameters"
-    cellSize?: number
-    reflectiveBoundary?: boolean
-    gridSizeLongest?: number
-}
-
-export type AppStateActionSetParameters = {
-    type: "setParameters"
+export type AppStateAction = {
+    drawCanvas?: HTMLCanvasElement | null
     dt?: number
     resolutionScale?: number
     simulationSpeed?: number
     urlShareId?: string | null
     shareId?: string | null
     windowSize?: [number, number]
+    cellSize?: number
+    reflectiveBoundary?: boolean
+    gridSizeLongest?: number
 }
-
-export type AppStateAction =
-    AppStateActionSetEm |
-    AppStateActionSetSimulationParameters |
-    AppStateActionSetParameters
 
 export const makeAppState = () => {
     const state: AppState = {
@@ -89,78 +75,91 @@ export const makeAppState = () => {
 }
 
 export const appReducer = (state: AppState, action: AppStateAction) => {
-    switch (action.type) {
-        case "setDrawCanvas":
-            state.drawCanvas = action.drawCanvas
-            if (state.drawCanvas !== null) {
-                state.em = createEM(state.drawCanvas, state.gridSize, state.cellSize,
-                    state.reflectiveBoundary, state.dt)
-            } else {
-                state.em = null
+    let shouldRecalculateCanvasSize = false
+    let shouldRecalculateGridSize = false
+    let shouldResetFieldAndMaterial = false
+
+    if (action.drawCanvas !== undefined) {
+        state.drawCanvas = action.drawCanvas
+        if (state.drawCanvas !== null) {
+            state.em = createEM(state.drawCanvas, state.gridSize, state.cellSize,
+                state.reflectiveBoundary, state.dt)
+        } else {
+            state.em = null
+        }
+    }
+
+    if (action.dt !== undefined) {
+        state.dt = action.dt
+    }
+
+    if (action.resolutionScale !== undefined) {
+        state.resolutionScale = action.resolutionScale
+    }
+
+    if (action.simulationSpeed !== undefined) {
+        state.simulationSpeed = action.simulationSpeed
+    }
+
+    if (action.urlShareId !== undefined) {
+        state.urlShareId = action.urlShareId
+    }
+
+    if (action.shareId !== undefined) {
+        state.shareId = action.shareId
+    }
+
+    if (action.windowSize !== undefined) {
+        state.windowSize = action.windowSize
+        
+        shouldRecalculateCanvasSize = true
+        shouldRecalculateGridSize = true
+        shouldResetFieldAndMaterial = true
+    }
+
+    if (action.cellSize !== undefined) {
+        state.cellSize = action.cellSize
+
+        state.em?.setCellSize(action.cellSize)
+    }
+
+    if (action.reflectiveBoundary !== undefined) {
+        state.reflectiveBoundary = action.reflectiveBoundary
+
+        state.em?.setReflectiveBoundary(action.reflectiveBoundary)
+    }
+
+    if (action.gridSizeLongest !== undefined) {
+        state.gridSizeLongest = action.gridSizeLongest
+        
+        shouldRecalculateGridSize = true
+        // TODO: Want to reset, but that also resets the
+        // material after loading the grid length
+        // shouldReset = true
+    }
+
+    // See if we need to tell EM about anything new
+    if (state.em) {
+        if (shouldRecalculateCanvasSize) {
+            state.canvasSize = calculateCanvasSize(state.windowSize, state.resolutionScale)
+
+            if (state.drawCanvas) {
+                state.drawCanvas.width = state.canvasSize[0]
+                state.drawCanvas.height = state.canvasSize[1]
             }
-            break
-        case "setSimulationParameters":
-            if (state.em) {
-                if (action.cellSize !== undefined) {
-                    state.cellSize = action.cellSize
 
-                    state.em.setCellSize(action.cellSize)
-                }
+            state.em.adjustCanvasSize(state.canvasSize)
+        }
 
-                if (action.reflectiveBoundary !== undefined) {
-                    state.reflectiveBoundary = action.reflectiveBoundary
+        if (shouldRecalculateGridSize) {
+            state.gridSize = calculateGridSize(state.gridSizeLongest, state.canvasSize)
+            state.em.setGridSize(state.gridSize)
+        }
 
-                    state.em.setReflectiveBoundary(action.reflectiveBoundary)
-                }
-
-                if (action.gridSizeLongest !== undefined) {
-                    state.gridSizeLongest = action.gridSizeLongest
-                    state.gridSize = calculateGridSize(state.gridSizeLongest, state.canvasSize)
-
-                    state.em.setGridSize(state.gridSize)
-                }
-            }
-            break
-        case "setParameters":
-            if (action.dt !== undefined) {
-                state.dt = action.dt
-            }
-
-            if (action.resolutionScale !== undefined) {
-                state.resolutionScale = action.resolutionScale
-            }
-
-            if (action.simulationSpeed !== undefined) {
-                state.simulationSpeed = action.simulationSpeed
-            }
-
-            if (action.urlShareId !== undefined) {
-                state.urlShareId = action.urlShareId
-            }
-
-            if (action.shareId !== undefined) {
-                state.shareId = action.shareId
-            }
-
-            if (action.windowSize !== undefined) {
-                state.windowSize = action.windowSize
-                state.canvasSize = calculateCanvasSize(state.windowSize, state.resolutionScale)
-                state.gridSize = calculateGridSize(state.gridSizeLongest, state.canvasSize)
-
-                if (state.drawCanvas) {
-                    state.drawCanvas.width = state.canvasSize[0]
-                    state.drawCanvas.height = state.canvasSize[1]
-                }
-
-                if (state.em) {
-                    state.em.adjustCanvasSize(state.canvasSize)
-                    state.em.setGridSize(state.gridSize)
-                    state.em.resetFields()
-                    state.em.resetMaterials()
-                }
-            }
-
-            break
+        if (shouldResetFieldAndMaterial) {
+            state.em.resetFields()
+            state.em.resetMaterials()
+        }
     }
 
     return state

@@ -27,7 +27,6 @@ export default function () {
     // Set canvas
     useEffect(() => {
         dispatch({
-            type: "setDrawCanvas",
             drawCanvas: drawCanvasRef.current
         })
     }, [drawCanvasRef])
@@ -36,7 +35,6 @@ export default function () {
     useEffect(() => {
         const adjustCanvasSize = () => {
             dispatch({
-                type: "setParameters",
                 windowSize: [window.innerWidth, window.innerHeight]
             })
         }
@@ -64,12 +62,7 @@ export default function () {
 
                 // Load settings
                 dispatch({
-                    type: "setParameters",
-                    dt: simulatorMap.simulationSettings.dt
-                })
-
-                dispatch({
-                    type: "setSimulationParameters",
+                    dt: simulatorMap.simulationSettings.dt,
                     cellSize: simulatorMap.simulationSettings.cellSize,
                     gridSizeLongest: Math.max(simulatorMap.simulationSettings.gridSize[0], simulatorMap.simulationSettings.gridSize[1])
                 })
@@ -217,7 +210,7 @@ export default function () {
                     },
                     sourceDescriptors: state.em.getSources().map(source => signalSourceToDescriptor(source))
                 })
-                    .then(shareId => dispatch({ type: "setParameters", shareId: shareId }))
+                    .then(shareId => dispatch({ shareId: shareId }))
                     .catch(err => console.log("Error uploading share: " + JSON.stringify(err)))
                     .finally(() => setShareInProgress(false))
             }
@@ -234,27 +227,27 @@ export default function () {
     }, [sideBar])
 
     const setGridSizeLongest = useCallback((newGridSizeLongest: number) => {
-        dispatch({ type: "setSimulationParameters", gridSizeLongest: newGridSizeLongest })
+        dispatch({ gridSizeLongest: newGridSizeLongest })
     }, [dispatch])
 
     const setCellSize = useCallback((newCellSize: number) => {
-        dispatch({ type: "setSimulationParameters", cellSize: newCellSize })
+        dispatch({ cellSize: newCellSize })
     }, [dispatch])
 
     const setReflectiveBoundary = useCallback((newReflectiveBoundary: boolean) => {
-        dispatch({ type: "setSimulationParameters", reflectiveBoundary: newReflectiveBoundary })
+        dispatch({ reflectiveBoundary: newReflectiveBoundary })
     }, [dispatch])
 
     const setDt = useCallback((newDt: number) => {
-        dispatch({ type: "setParameters", dt: newDt })
+        dispatch({ dt: newDt })
     }, [dispatch])
 
     const setSimulationSpeed = useCallback((newSimulationSpeed: number) => {
-        dispatch({ type: "setParameters", simulationSpeed: newSimulationSpeed })
+        dispatch({ simulationSpeed: newSimulationSpeed })
     }, [dispatch])
 
     const setResolutionScale = useCallback((newResolutionScale: number) => {
-        dispatch({ type: "setParameters", resolutionScale: newResolutionScale })
+        dispatch({ resolutionScale: newResolutionScale })
     }, [dispatch])
 
     return <>
