@@ -8,6 +8,17 @@ function clamp(min: number, max: number, value: number) {
     return Math.max(min, Math.min(max, value))
 }
 
+function snapToGrid(relativePoint: [number, number], gridSize: [number, number]) {
+    const relativeCellSize = [1 / gridSize[0], 1 / gridSize[1]]
+    const residual = [relativePoint[0] % relativeCellSize[0], relativePoint[1] % relativeCellSize[1]]
+    const gridPoint = [
+        relativePoint[0] - residual[0] + 0.5 * relativeCellSize[0],
+        relativePoint[1] - residual[1] + 0.5 * relativeCellSize[1]
+    ]
+
+    return gridPoint
+}
+
 export function combineMaterialMaps(permittivity: number[][],
     permeability: number[][], conductivity: number[][]): number[][][] {
     const material: number[][][] = [];
@@ -318,13 +329,12 @@ export class FDTDSimulator implements Simulator {
         })
 
         this.drawOnTexture = {
-            [DrawShape.Ellipse]: makeFragWithFboPropFn(k.drawCircle, {
+            [DrawShape.Ellipse]: makeFragWithFboPropFn(k.drawEllipse, {
                 texture: (_: any, props: any) => props.texture,
                 pos: (_: any, props: any) => props.pos,
                 value: (_: any, props: any) => props.value,
                 radius: (_: any, props: any) => props.radius,
                 keep: (_: any, props: any) => props.keep,
-                gridSize: () => this.gridSize,
             }),
             [DrawShape.Square]: makeFragWithFboPropFn(k.drawSquare, {
                 texture: (_: any, props: any) => props.texture,
@@ -332,7 +342,6 @@ export class FDTDSimulator implements Simulator {
                 value: (_: any, props: any) => props.value,
                 size: (_: any, props: any) => props.size,
                 keep: (_: any, props: any) => props.keep,
-                gridSize: () => this.gridSize,
             }),
         }
 
@@ -478,12 +487,11 @@ export class FDTDSimulator implements Simulator {
         }
 
         const uniforms: any = {
-            pos: drawInfo.center,
+            pos: snapToGrid(drawInfo.center, this.gridSize),
             value: value,
             keep: keep,
             texture: this.data.material.previous,
-            fbo: this.data.material.current,
-            gridSize: this.gridSize
+            fbo: this.data.material.current
         }
 
         if (drawInfo.drawShape === DrawShape.Ellipse) {
@@ -501,7 +509,7 @@ export class FDTDSimulator implements Simulator {
         this.data.electricSourceField.swap()
 
         const uniforms: any = {
-            pos: drawInfo.center,
+            pos: snapToGrid(drawInfo.center, this.gridSize),
             value: [0, 0, drawInfo.value * dt, 0],
             keep: [1, 1, 1, 1],
             texture: this.data.electricSourceField.previous,
