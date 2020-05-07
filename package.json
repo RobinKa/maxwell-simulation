@@ -1,21 +1,21 @@
 {
   "name": "maxwell",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "homepage": "https://cemsim.com",
   "dependencies": {
-    "@types/jest": "24.0.19",
-    "@types/node": "12.11.1",
+    "@types/jest": "^24.9.1",
+    "@types/node": "^12.12.38",
     "@types/pako": "^1.0.1",
-    "@types/react": "16.9.9",
-    "@types/react-dom": "16.9.2",
-    "gpu.js": "git+https://github.com/gpujs/gpu.js.git#ab7510303260067568d395fcb398420a3986bd76",
-    "pako": "^1.0.10",
-    "react": "^16.10.2",
-    "react-dom": "^16.10.2",
+    "@types/react": "^16.9.34",
+    "@types/react-dom": "^16.9.7",
+    "pako": "^1.0.11",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1",
     "react-scripts": "^3.4.1",
     "react-spinners": "^0.6.1",
-    "typescript": "3.6.4"
+    "regl": "^1.4.2",
+    "typescript": "^3.8.3"
   },
   "scripts": {
     "start": "react-scripts start",

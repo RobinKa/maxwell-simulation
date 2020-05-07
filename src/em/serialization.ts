@@ -1,4 +1,4 @@
-import * as pako from "pako"
+import pako from "pako"
 import { SignalSource, PointSignalSource } from "./sources"
 
 export const currentSimulatorMapVersion = 1
@@ -15,6 +15,31 @@ export type MaterialMap = {
     permeability: number[][]
     conductivity: number[][]
     shape: [number, number]
+}
+
+export function makeMaterialMap(material: number[][][]): MaterialMap {
+    const permittivity: number[][] = []
+    const permeability: number[][] = []
+    const conductivity: number[][] = []
+
+    const shape: [number, number] = [material[0].length, material.length]
+    for (let y = 0; y < shape[1]; y++) {
+        permittivity.push([])
+        permeability.push([])
+        conductivity.push([])
+        for (let x = 0; x < shape[0]; x++) {
+            permittivity[y].push(material[y][x][0])
+            permeability[y].push(material[y][x][1])
+            conductivity[y].push(material[y][x][2])
+        }
+    }
+
+    return {
+        permittivity,
+        permeability,
+        conductivity,
+        shape
+    }
 }
 
 export type EncodedMaterialMap = string
