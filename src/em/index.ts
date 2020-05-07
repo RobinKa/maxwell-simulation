@@ -31,7 +31,7 @@ export function createEM(canvas: HTMLCanvasElement, gridSize: [number, number],
     cellSize: number, reflectiveBoundary: boolean, dt: number): EMState {
     const regl = createReglFromCanvas(canvas)
 
-    const { render, adjustSize } = makeRenderSimulatorCanvas(regl, gridSize)
+    const { render, adjustCanvasSize, adjustGridSize } = makeRenderSimulatorCanvas(regl, [canvas.width, canvas.height], gridSize)
     const sim: Simulator = new FDTDSimulator(regl, gridSize, cellSize, reflectiveBoundary, dt)
 
     const renderToCanvas = (showElectric: boolean, showMagnetic: boolean) => {
@@ -53,15 +53,20 @@ export function createEM(canvas: HTMLCanvasElement, gridSize: [number, number],
         sim.stepElectric(dt)
     }
 
+    const setGridSize = (newGridSize: [number, number]) => {
+        sim.setGridSize(newGridSize)
+        adjustGridSize(newGridSize)
+    }
+
     return {
         renderToCanvas: renderToCanvas,
-        adjustCanvasSize: adjustSize,
+        adjustCanvasSize: adjustCanvasSize,
         stepSim: stepSim,
         injectSignal: sim.injectSignal,
         getSources: () => sources,
         setSources: (newSources: SignalSource[]) => sources = newSources,
-        setGridSize: (newGridSize: [number, number]) => sim.setGridSize(newGridSize),
-        setCellSize: (newCellSize: number) => sim.setCellSize(newCellSize),
+        setGridSize: setGridSize,
+        setCellSize: sim.setCellSize,
         getTime: () => sim.getData().time,
         setReflectiveBoundary: sim.setReflectiveBoundary,
         loadMaterialFromComponents: sim.loadMaterialFromComponents,

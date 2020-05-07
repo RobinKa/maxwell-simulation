@@ -57,12 +57,9 @@ export const blurDirectional = `
     }
 `
 
-export const draw = `
+export const renderBackground = `
     precision highp float;
 
-    uniform sampler2D energyTexture;
-    uniform sampler2D bloomTexture;
-    uniform sampler2D materialTexture;
     uniform vec2 gridSize;
 
     varying vec2 uv;
@@ -70,13 +67,6 @@ export const draw = `
     const float sqrtTwoPi = 2.50662827463;
 
     void main() {
-        vec2 energy = texture2D(energyTexture, uv).rg;
-        vec2 bloom = texture2D(bloomTexture, uv).rg;
-        vec3 material = texture2D(materialTexture, uv).rgb;
-
-        vec2 pValues = 2.0 / (1.0 + exp(-0.5 * (material.rg - 1.0))) - 1.0;
-        float cValue = material.b / 10.0;
-
         vec2 tileFactor = gridSize;
 
         // Repeat -0.5..+0.5 sawtooth for as many cells as we have
@@ -94,11 +84,41 @@ export const draw = `
         float bgPermittivity = -smoothstep(0.0, 1.0, pCircleDists.x);
         float bgPermeability = -smoothstep(0.0, 1.0, pCircleDists.y);
 
-        bgPermittivity = pValues.x >= 0.1 ? 1.0 + bgPermittivity : bgPermittivity;
-        bgPermeability = pValues.y >= 0.1 ? 1.0 + bgPermeability : bgPermeability;
+        gl_FragColor = vec4(
+            bgPermittivity,
+            bgPermeability,
+            dConductivity.x,
+            dConductivity.y
+        );
+    }
+`
+
+export const draw = `
+    precision highp float;
+
+    uniform sampler2D energyTexture;
+    uniform sampler2D bloomTexture;
+    uniform sampler2D materialTexture;
+    uniform sampler2D backgroundTexture;
+
+    varying vec2 uv;
+
+    const float sqrtTwoPi = 2.50662827463;
+
+    void main() {
+        vec2 energy = texture2D(energyTexture, uv).rg;
+        vec2 bloom = texture2D(bloomTexture, uv).rg;
+        vec3 material = texture2D(materialTexture, uv).rgb;
+        vec4 background = texture2D(backgroundTexture, uv);
+
+        vec2 pValues = 2.0 / (1.0 + exp(-0.5 * (material.rg - 1.0))) - 1.0;
+        float cValue = material.b / 10.0;
+
+        float bgPermittivity = pValues.x >= 0.1 ? 1.0 + background.r : background.r;
+        float bgPermeability = pValues.y >= 0.1 ? 1.0 + background.g : background.g;
         float backgroundConductivity = 0.5 * (cValue >= 0.0 ?
-            cValue * smoothstep(0.0, 1.0, dConductivity.x) :
-            -cValue * smoothstep(0.0, 1.0, dConductivity.y)
+            cValue * smoothstep(0.0, 1.0, background.b) :
+            -cValue * smoothstep(0.0, 1.0, background.a)
         );
 
         gl_FragColor = vec4(

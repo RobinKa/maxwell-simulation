@@ -17,7 +17,7 @@ export function createReglFromCanvas(canvas: HTMLCanvasElement) {
     })
 }
 
-export function makeRenderSimulatorCanvas(regl: Regl, canvasSize: [number, number]) {
+export function makeRenderSimulatorCanvas(regl: Regl, canvasSize: [number, number], gridSize: [number, number]) {
     const filter = regl.hasExtension("OES_texture_half_float_linear") ? "linear" : "nearest"
 
     const frameBuffers: Framebuffer2D[] = []
@@ -46,6 +46,32 @@ export function makeRenderSimulatorCanvas(regl: Regl, canvasSize: [number, numbe
 
     const fbos = [makeFrameBuffer(), makeFrameBuffer()]
     const energyFbo = makeFrameBuffer()
+    const backgroundFbo = makeFrameBuffer()
+
+    type RenderBackgroundUniforms = {
+        gridSize: [number, number]
+    }
+
+    const renderBackground = regl<RenderBackgroundUniforms, {}, RenderBackgroundUniforms>({
+        frag: k.renderBackground,
+        framebuffer: backgroundFbo,
+        uniforms: {
+            gridSize: (_, { gridSize }) => gridSize
+        },
+
+        attributes: {
+            position: [
+                [1, -1],
+                [1, 1],
+                [-1, -1],
+                [-1, 1]
+            ]
+        },
+        vert: k.vertDraw,
+        count: 4,
+        primitive: "triangle strip",
+        depth: { enable: false }
+    })
 
     type RenderEnergyUniforms = {
         brightness: number
@@ -161,7 +187,7 @@ export function makeRenderSimulatorCanvas(regl: Regl, canvasSize: [number, numbe
         energyTexture: Framebuffer2D
         bloomTexture: Framebuffer2D
         materialTexture: Framebuffer2D
-        gridSize: [number, number]
+        backgroundTexture: Framebuffer2D
     }
 
     const draw = regl<DrawUniforms, {}, DrawUniforms>({
@@ -170,7 +196,7 @@ export function makeRenderSimulatorCanvas(regl: Regl, canvasSize: [number, numbe
             energyTexture: (_, { energyTexture }) => energyTexture,
             bloomTexture: (_, { bloomTexture }) => bloomTexture,
             materialTexture: (_, { materialTexture }) => materialTexture,
-            gridSize: (_, { gridSize }) => gridSize,
+            backgroundTexture: (_, { backgroundTexture }) => backgroundTexture,
         },
 
         attributes: {
@@ -215,15 +241,24 @@ export function makeRenderSimulatorCanvas(regl: Regl, canvasSize: [number, numbe
             energyTexture: energyFbo,
             bloomTexture: fbos[0],
             materialTexture: material,
-            gridSize: gridSize
+            backgroundTexture: backgroundFbo
         })
     }
 
+    renderBackground({
+        gridSize: gridSize
+    })
+
     return {
         render: render,
-        adjustSize: (size: [number, number]) => {
+        adjustCanvasSize: (size: [number, number]) => {
             frameBuffers.forEach(fbo => fbo.resize(size[0], size[1]))
             regl.poll()
+        },
+        adjustGridSize: (gridSize: [number, number]) => {
+            renderBackground({
+                gridSize: gridSize
+            })
         }
     }
 }
