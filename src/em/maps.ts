@@ -58,7 +58,7 @@ export function doubleSlit(simulationSettings: SimulationSettings): SimulatorMap
         type: "point",
         amplitude: 30000,
         frequency: 3,
-        position: [0.5, 13.5 / 15]
+        position: [0.5, 14.5 / 15]
     }]
 
     return {
