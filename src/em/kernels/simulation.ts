@@ -259,7 +259,7 @@ export const copyUint8ToFloat16 = `
     varying vec2 uv;
 
     void main() {
-        gl_FragColor = (-128.0 + 256.0 * texture2D(texture, uv)) / 4.0;
+        gl_FragColor = (-128.0 + 255.0 * texture2D(texture, uv)) / 4.0;
     }
 `
 
